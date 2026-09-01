@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pond & Catchment Analyzer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    <header class="app-header">
+        <h1>Pond & Catchment Analyzer</h1>
+        <p>Terrain-Derived Hydrological Site Assessment</p>
+    </header>
+
+    <main class="container">
+        <section class="sidebar">
+            <form id="analysisForm" class="card">
+                <h2>Analysis Parameters</h2>
+
+                <div class="form-group">
+                    <label for="contourFile">Contour Map (.kml / .kmz)</label>
+                    <input type="file" id="contourFile" accept=".kml,.kmz" required>
+                    <small id="fileNameDisplay" class="file-name"></small>
+                </div>
+
+                <div class="form-group">
+                    <label for="riverDistance">Minimum Distance From River (meters)</label>
+                    <input type="number" id="riverDistance" value="30" min="0" step="5" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="pondCount">Number of Pond Locations</label>
+                    <input type="number" id="pondCount" value="5" min="1" max="20" required>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-primary">Analyze Map</button>
+            </form>
+
+            <div id="summaryCard" class="card hidden">
+                <h2>Analysis Summary</h2>
+                <div id="summaryContent" class="summary-grid"></div>
+            </div>
+
+            <div class="card disclaimer-card">
+                <h3>Notice</h3>
+                <p>These locations are terrain-derived candidates based on contour interpolation, terrain flow, catchment connectivity and drainage exclusion. They are not engineering-grade hydrological recommendations.</p>
+            </div>
+        </section>
+
+        <section class="content-area">
+            <div id="loadingOverlay" class="loading-overlay hidden">
+                <div class="spinner"></div>
+                <p id="loadingMessage">Analyzing contour map...</p>
+            </div>
+
+            <div class="card map-card">
+                <div id="map"></div>
+                <div class="map-legend">
+                    <div><span class="legend-icon pond-icon"></span> Pond Location</div>
+                    <div><span class="legend-icon catchment-icon"></span> Catchment Region</div>
+                    <div><span class="legend-icon channel-icon"></span> Drainage Channel</div>
+                </div>
+            </div>
+
+            <div class="card table-card">
+                <h2>Top Candidate Pond Locations</h2>
+                <div class="table-container">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Latitude</th>
+                                <th>Longitude</th>
+                                <th>Elevation (m)</th>
+                                <th>Score</th>
+                                <th>Catchment Area</th>
+                                <th>Channel Dist (m)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="7" class="text-center">Upload a contour map and run analysis to view results.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
