@@ -6,4 +6,4 @@ __pycache__/
 .env
 .vscode/
 .idea/
-.DS_Store
+.DS_Storeserver.log

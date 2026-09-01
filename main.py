@@ -1,11 +1,11 @@
 from typing import Optional
+from pathlib import Path
 
 from fastapi import FastAPI, File, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 
 from catchment import (
     calculate_flow_accumulation,
@@ -18,7 +18,6 @@ from contour_parser import KMLParseError, parse_kml_or_kmz
 from graph import build_terrain_graph
 from terrain import build_terrain_grid
 
-
 ROOT = Path(__file__).resolve().parent
 
 app = FastAPI(
@@ -27,18 +26,12 @@ app = FastAPI(
     description="Student-level graph-based terrain analysis from KML/KMZ contour maps.",
 )
 
-# The browser UI is intentionally simple and local-only. These origins cover the
-# optional separate static-server workflow while keeping the API easy to test.
+# CORS configuration allowing all external origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -107,8 +100,6 @@ async def analyze_contour(
                 }
             )
 
-        # Return short line segments formed only by adjacent terrain-derived
-        # channel cells. No synthetic river is created.
         channel_segments = []
         for node_id in sorted(river_nodes):
             node = graph.nodes[node_id]
@@ -132,8 +123,6 @@ async def analyze_contour(
         analysis["channel_node_count"] = len(river_nodes)
         analysis["explicit_waterway_count"] = len(waterways)
 
-        # Keep the original single-result fields so existing clients/tests continue
-        # to work, while the new pond_locations list provides the ranked results.
         best = pond_locations[0]
         best_catchment = best["catchment"]
         best_distance = best["distance_from_channel_m"]
@@ -182,10 +171,8 @@ async def validation_error_handler(request, exc):
     return JSONResponse(status_code=400, content={"status": "error", "message": "Invalid request parameters."})
 
 
-# Serve the frontend only after API routes have been registered.
 app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
-
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
