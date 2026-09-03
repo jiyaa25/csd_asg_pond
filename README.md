@@ -1,47 +1,43 @@
 # Pond Location and Catchment Detection
 
-A simple FastAPI + Leaflet demonstration for terrain-derived pond candidate selection and upstream catchment estimation from KML/KMZ contour maps.
+A FastAPI-based terrain analysis system that accepts KML/KMZ contour maps, identifies terrain-derived pond candidates, and estimates their upstream catchment areas using flow-based terrain analysis.
 
-> **Scope:** This is an academic terrain-analysis system, not an engineering-grade hydrological model. The frontend is only a visualization/testing interface; all terrain analysis remains in the Python backend.
+## 1. Project Overview
 
-## 1. Assignment Pipeline
+The system performs the following pipeline:
 
 ```text
-KML/KMZ upload
-      ↓
-KML/KMZ parsing
-      ↓
-Contour + elevation extraction
-      ↓
-IDW terrain interpolation
-      ↓
-8-neighbour terrain graph
-      ↓
-D8 steepest-downhill flow
-      ↓
-Flow accumulation
-      ↓
-River/channel detection
-      ↓
-Ridge candidate detection
-      ↓
-Pond candidate filtering + scoring
-      ↓
-Spatially separated top-N selection
-      ↓
-Reverse-flow BFS catchment
-      ↓
-Geographic catchment-area calculation
-      ↓
-JSON response
-      ↓
-Leaflet visualization
+KML/KMZ Contour Map
+        ↓
+Contour & Elevation Extraction
+        ↓
+IDW Terrain Interpolation
+        ↓
+8-Neighbour Terrain Graph
+        ↓
+D8 Flow Routing
+        ↓
+Flow Accumulation
+        ↓
+Drainage/Channel Detection
+        ↓
+Pond Candidate Selection & Filtering
+        ↓
+Top-N Pond Selection
+        ↓
+Reverse-Flow Catchment Detection
+        ↓
+Catchment Area Calculation
+        ↓
+JSON Response
 ```
+
+The catchment is calculated from the terrain-derived flow network rather than using a circular buffer.
 
 ## 2. Project Structure
 
 ```text
-csd_asg_phase2/
+csd_asg_pond/
 ├── main.py
 ├── contour_parser.py
 ├── terrain.py
@@ -61,249 +57,235 @@ csd_asg_phase2/
 ├── outputs/
 │   └── sample_analysis.json
 ├── README.md
-├── REPORT.md
-└── SUBMISSION_CHECKLIST.md
+└── REPORT.md
 ```
 
-Do not submit `.venv/`, Python caches, pytest caches, IDE folders or other temporary files.
+Temporary files such as virtual environments, Python caches and IDE folders should not be submitted.
 
 ## 3. Backend
 
-The existing backend was preserved and extended rather than rebuilt. It still performs:
+The backend is implemented using **FastAPI**.
 
-- KML/KMZ parsing and elevation extraction
-- IDW terrain interpolation
-- 8-neighbour graph construction
-- Haversine edge distances and D8 downhill flow
-- flow accumulation
-- terrain-derived channel detection and explicit-waterway detection
-- ridge filtering
-- pond candidate scoring
-- reverse-flow BFS catchment calculation
-- geographic catchment area estimation
+It performs:
 
-The new selection step ranks valid candidates and applies a simple minimum grid-cell separation so multiple results are meaningful, rather than returning neighbouring copies of the same location.
+* KML/KMZ contour parsing
+* Elevation extraction
+* IDW terrain interpolation
+* 8-neighbour terrain graph construction
+* D8 downhill flow routing
+* Flow accumulation
+* Drainage/channel detection
+* Pond candidate filtering and scoring
+* Spatially separated pond selection
+* Reverse-flow BFS catchment detection
+* Geographic catchment area calculation
 
-## 4. API
+## 4. API Endpoint
 
 ### `POST /analyzeContour`
 
-Multipart field:
+**Hosted API:**
 
 ```text
-file = KML/KMZ file
+http://10.1.75.79:5261/analyzeContour
 ```
 
-Query parameters:
+The endpoint accepts a KML or KMZ file using the multipart form-data field:
 
 ```text
-drainage_safety_buffer_m=30
-number_of_ponds=5
+contour_map
 ```
 
-Example:
+### Query Parameters
+
+| Parameter                  | Type    | Default | Description                                     |
+| -------------------------- | ------- | ------: | ----------------------------------------------- |
+| `drainage_safety_buffer_m` | Float   |   `200` | Minimum distance from detected drainage/channel |
+| `number_of_ponds`          | Integer |     `5` | Number of pond candidates to return             |
+
+### Example Request
 
 ```text
-POST http://127.0.0.1:8000/analyzeContour?drainage_safety_buffer_m=30&number_of_ponds=5
+POST http://10.1.75.79:5261/analyzeContour
 ```
 
-The response now contains `pond_locations`, with rank, coordinates, elevation, suitability score, channel distance and graph-derived catchment information for every selected candidate. The original single-result fields (`pond_location`, `catchment`, and `river_safety`) are retained for backward compatibility with the previous API/tests.
-
-The catchment contains the actual grid-cell polygons visited by reverse-flow BFS. It is **not** a circular buffer around a pond.
-
-The response also contains terrain-derived channel line segments and any explicit KML waterways. No river geometry is fabricated when none exists.
-
-### Other endpoints
+Use `multipart/form-data`:
 
 ```text
-GET /                 frontend
-GET /health           health check
-GET /docs             Swagger API documentation
+contour_map → KML/KMZ file
 ```
 
-## 5. Frontend Demonstration
-
-The frontend is deliberately plain HTML/CSS/JavaScript. It uses Leaflet from a CDN and OpenStreetMap tiles; no React, Vite, database, authentication or cloud service is required.
-
-It provides:
-
-1. KML/KMZ file selection
-2. User-controlled minimum river/channel distance
-3. User-controlled number of pond candidates
-4. Analyze button and loading/error messages
-5. Ranked pond markers (`P1`, `P2`, ...)
-6. Clickable map popups with elevation, score, catchment and channel distance
-7. Flow-derived catchment-cell visualization for the selected pond
-8. Terrain-derived/explicit channel visualization when available
-9. Dynamic result table
-10. Analysis summary
-11. Clicking a table row selects and centers the corresponding pond
-
-The locations are described as **Terrain-derived Pond Candidates**, not guaranteed or engineering-grade pond sites.
-
-## 6. Running the Application
-
-### Windows PowerShell
-
-```powershell
-cd path\to\csd_asg_phase2
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python main.py
-```
-
-If PowerShell blocks activation, Command Prompt can use:
-
-```cmd
-.venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
-
-### Linux/macOS
-
-```bash
-cd path/to/csd_asg_phase2
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
-```
-
-Then open:
+The default values are:
 
 ```text
-http://127.0.0.1:8000/
+drainage_safety_buffer_m = 200
+number_of_ponds = 5
 ```
 
-Swagger:
+They can also be specified explicitly:
 
 ```text
-http://127.0.0.1:8000/docs
+POST http://10.1.75.79:5261/analyzeContour?drainage_safety_buffer_m=200&number_of_ponds=5
 ```
 
-The preferred setup serves the frontend directly from FastAPI, so a separate frontend server is not required.
+## 5. Testing Through Postman
 
-## 7. Frontend Demonstration Steps
-
-1. Start the application with `python main.py`.
-2. Open `http://127.0.0.1:8000/`.
-3. Select `contours_1m.kml`.
-4. Enter `30` for minimum distance from river/channel.
-5. Enter `5` for number of pond locations.
-6. Click **Analyze Map**.
-7. Wait for **Analyzing contour map...** to finish.
-8. Inspect the ranked markers and result table.
-9. Click a marker or table row to inspect that pond's catchment.
-10. Change the distance or pond count and run the analysis again.
-
-## 8. Test Through Swagger
-
-1. Open `http://127.0.0.1:8000/docs`.
-2. Open `POST /analyzeContour`.
-3. Click **Try it out**.
-4. Choose `contours_1m.kml`.
-5. Set `drainage_safety_buffer_m` and `number_of_ponds`.
-6. Click **Execute**.
-7. Confirm `status: success` and inspect `pond_locations`.
-
-## 9. curl Examples
-
-Windows/Linux/macOS:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/analyzeContour?drainage_safety_buffer_m=30&number_of_ponds=5" -F "file=@contours_1m.kml"
-```
-
-For a KMZ:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/analyzeContour?drainage_safety_buffer_m=30&number_of_ponds=5" -F "file=@contour_map.kmz"
-```
-
-## 10. Automated Tests
-
-```bash
-pytest -q
-```
-
-The test suite covers parsing, KML/KMZ handling, terrain/grid construction, graph construction, flow accumulation, filtering, catchment traversal and the API.
-
-## 11. Generate the Sample Demonstration JSON
-
-```bash
-python generate_outputs.py
-```
-
-This runs the real `contours_1m.kml` through the backend and writes:
+1. Open Postman.
+2. Select **POST**.
+3. Enter:
 
 ```text
-outputs/sample_analysis.json
+http://10.1.75.79:5261/analyzeContour
 ```
 
-No sample coordinates are hard-coded into the analysis.
+4. Go to **Body → form-data**.
+5. Add:
 
-## 12. Sample Response Shape
+```text
+Key: contour_map
+Type: File
+Value: contours_1m.kml
+```
+
+6. Send the request.
+
+The API returns a JSON response containing the analysis results.
+
+## 6. Swagger Documentation
+
+Interactive API documentation is available at:
+
+```text
+http://10.1.75.79:5261/docs
+```
+
+From Swagger, the `POST /analyzeContour` endpoint can be tested by uploading a KML/KMZ contour map and providing the analysis parameters.
+
+## 7. Response
+
+A successful response contains information such as:
 
 ```json
 {
   "status": "success",
   "input": {
-    "filename": "contours_1m.kml",
-    "contour_count": 1355,
-    "elevation_min_m": 267.0,
-    "elevation_max_m": 298.0,
-    "grid_size": 120
+    "filename": "contours_1m.kml"
   },
   "pond_locations": [
     {
       "rank": 1,
-      "latitude": 0.0,
-      "longitude": 0.0,
-      "elevation": 0.0,
-      "suitability_score": 0.0,
-      "catchment_area_square_meters": 0.0,
-      "catchment_area_hectares": 0.0,
-      "catchment_cells": 0,
-      "distance_from_channel_m": 0.0,
-      "catchment": {
-        "area_square_meters": 0.0,
-        "area_hectares": 0.0,
-        "number_of_cells": 0,
-        "cells": []
-      }
+      "latitude": "...",
+      "longitude": "...",
+      "elevation": "...",
+      "suitability_score": "...",
+      "catchment_area_square_meters": "...",
+      "catchment_area_hectares": "...",
+      "catchment_cells": "...",
+      "distance_from_channel_m": "..."
     }
-  ],
-  "analysis": {
-    "requested_ponds": 5,
-    "valid_candidate_count": 0,
-    "ponds_selected": 0
-  }
+  ]
 }
 ```
 
-The numeric values above are schema placeholders only. The live API calculates the actual values from the uploaded map.
+The response also includes catchment cell geometry and analysis statistics.
 
-## 13. Error Handling
+## 8. Frontend
 
-The API returns friendly JSON errors such as:
+The project includes a simple Leaflet-based frontend for visualization.
 
-```json
-{"status":"error","message":"No file uploaded."}
+It allows the user to:
+
+* Upload a KML/KMZ contour map
+* Set the drainage safety distance
+* Select the number of pond candidates
+* View ranked pond locations
+* View catchment regions
+* View drainage/channel information
+* Inspect pond properties on the map
+
+The frontend communicates with the same FastAPI backend.
+
+## 9. Running Locally
+
+### Linux/macOS
+
+```bash
+git clone https://github.com/jiyaa25/csd_asg_pond.git
+cd csd_asg_pond
+
+python3 -m venv venv
+source venv/bin/activate
+
+pip install -r requirements.txt
+python main.py
 ```
 
-```json
-{"status":"error","message":"Unsupported file format. Upload a .kml or .kmz file."}
+### Windows
+
+```powershell
+git clone https://github.com/jiyaa25/csd_asg_pond.git
+cd csd_asg_pond
+
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+pip install -r requirements.txt
+python main.py
 ```
 
-The frontend converts these into readable messages such as **Please select a KML or KMZ file.** or **The uploaded file could not be analyzed.**
+The application will start using the configured FastAPI port.
 
-## 14. Important Limitations
+## 10. Testing
 
-- IDW creates an estimated surface between contour lines; it is not a measured DEM.
-- D8 sends each cell to one steepest-downhill neighbour, so it is a simplified flow model.
-- High flow accumulation is used as a terrain-derived channel indicator when explicit waterways are unavailable.
-- The river safety distance is an academic screening rule, not a legal or engineering setback.
-- Catchment area is approximate and depends on the contour map and grid resolution.
-- Candidate locations are terrain-derived screening candidates, not guaranteed pond sites.
+Run the automated tests using:
+
+```bash
+pytest -q
+```
+
+A sample analysis can also be generated using:
+
+```bash
+python generate_outputs.py
+```
+
+This processes `contours_1m.kml` and generates:
+
+```text
+outputs/sample_analysis.json
+```
+
+## 11. Important Limitations
+
+* IDW interpolation creates an estimated elevation surface between contour lines.
+* D8 flow routing is a simplified terrain-flow model.
+* Flow accumulation is used as a terrain-based indicator of drainage/channel areas.
+* The 200 m drainage distance is an academic screening parameter, not an engineering or legal setback.
+* Catchment areas are approximate and depend on the contour data and grid resolution.
+* The identified locations are terrain-derived pond candidates and are not guaranteed engineering-grade pond sites.
+
+## 12. Repository
+
+GitHub Repository:
+
+```text
+https://github.com/jiyaa25/csd_asg_pond
+```
+
+Hosted API:
+
+```text
+http://10.1.75.79:5261/
+```
+
+API Endpoint:
+
+```text
+POST http://10.1.75.79:5261/analyzeContour
+```
+
+Swagger:
+
+```text
+http://10.1.75.79:5261/docs
+```
