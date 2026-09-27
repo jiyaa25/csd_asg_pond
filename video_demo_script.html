@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Village Pond Planning System - 5-Minute Demo Video Script</title>
+<style>
+  @page {
+    size: A4;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.45;
+    font-size: 12px;
+    margin: 0;
+    padding: 0;
+  }
+  .header {
+    border-bottom: 2px solid #0284c7;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+  }
+  .header h1 {
+    font-size: 20px;
+    color: #0369a1;
+    margin: 0 0 4px 0;
+  }
+  .meta-badges {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge {
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  .badge-purple {
+    background: #ede9fe;
+    color: #6d28d9;
+  }
+  .act-box {
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .act-header {
+    background: #f1f5f9;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .act-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .act-time {
+    font-size: 11px;
+    font-weight: 700;
+    color: #0284c7;
+    background: #e0f2fe;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .act-content {
+    padding: 8px 12px;
+  }
+  .action-box {
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    border-radius: 0 4px 4px 0;
+    font-size: 11px;
+    color: #92400e;
+  }
+  .action-box strong {
+    color: #b45309;
+  }
+  .speech-box {
+    background: #f0fdf4;
+    border-left: 3px solid #10b981;
+    padding: 8px 10px;
+    border-radius: 0 4px 4px 0;
+    font-size: 11.5px;
+    color: #064e3b;
+    font-style: italic;
+  }
+  .speech-box strong {
+    font-style: normal;
+    color: #047857;
+  }
+  .tips-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 11px;
+    page-break-inside: avoid;
+  }
+  .tips-box h4 {
+    margin: 0 0 4px 0;
+    color: #334155;
+  }
+  ul {
+    margin: 2px 0 0 16px;
+    padding: 0;
+  }
+  li {
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI-based Village Pond Planning System — 5-Minute Video Demo Script</h1>
+  <div class="meta-badges">
+    <span class="badge">Max Duration: 5:00 (Target: ~4:30)</span>
+    <span class="badge">Live Web App: http://10.1.75.79:5261/</span>
+    <span class="badge badge-purple">Presenter: Jiya Mehta (IIT Bhilai / DSAI)</span>
+  </div>
+</div>
+
+<!-- ACT 1 -->
+<div class="act-box">
+  <div class="act-header">
+    <span class="act-title">Act 1: The Problem — Why Villages Need Smart Pond Planning</span>
+    <span class="act-time">0:00 – 0:45</span>
+  </div>
+  <div class="act-content">
+    <div class="action-box">
+      <strong>Screen Action:</strong> Show http://10.1.75.79:5261/ full screen. Mouse over the title header and the clean interactive map of India.
+    </div>
+    <div class="speech-box">
+      "Hello everyone! Today, I want to show you a project I built to solve a crucial challenge in rural India: <strong>water conservation and farm pond planning</strong>.<br><br>
+      During the monsoon season, rural areas receive heavy rain, but most of it rapidly washes away as surface runoff, leading to soil erosion and severe seasonal droughts. Earthen farm ponds—or <em>talabs</em>—are vital for rainwater harvesting and recharging groundwater. But manual site selection is fraught with error. Digging on top of a hill yields zero inflow, while digging directly inside a raging flood channel causes embankment washouts.<br><br>
+      We built an automated, web-based geospatial decision-support tool that analyzes 3D elevation terrain, maps natural gravity drainage, and recommends the safest, highest-yielding pond locations with exact storage calculations."
+    </div>
+  </div>
+</div>
+
+<!-- ACT 2 -->
+<div class="act-box">
+  <div class="act-header">
+    <span class="act-title">Act 2: How the Algorithm Works (In Simple Everyday Words)</span>
+    <span class="act-time">0:45 – 1:45</span>
+  </div>
+  <div class="act-content">
+    <div class="action-box">
+      <strong>Screen Action:</strong> Point smoothly to the soil type dropdown, the map layer options, and the workflow tabs.
+    </div>
+    <div class="speech-box">
+      "How does our system figure this out? Think of it like this:<br><br>
+      <strong>1. Rolling Marbles Downhill (D8 Flow):</strong> If you drop a marble on sloped ground, gravity rolls it along the steepest path. Our backend divides the land into thousands of cells and routes water flow from every cell to its steepest downhill neighbor.<br>
+      <strong>2. Finding Safe Natural Valleys:</strong> The computer finds natural depressions where water gathers. But crucially, it enforces a <strong>200-meter safety buffer</strong> away from major river torrents so the pond never washes away.<br>
+      <strong>3. Uphill Catchment Delineation:</strong> Once an optimal site is selected, we trace backwards uphill—like drawing an invisible bowl around the pond—to find every square meter of land contributing runoff.<br>
+      <strong>4. The Rain Sponge Formula:</strong> Finally, we calculate storage volume using the hydrological Rational Equation: <strong>Volume = Catchment Area &times; Rainfall &times; Soil Factor</strong>. Our system connects directly to live weather APIs to fetch real annual precipitation for that exact location!"
+    </div>
+  </div>
+</div>
+
+<!-- ACT 3 -->
+<div class="act-box">
+  <div class="act-header">
+    <span class="act-title">Act 3: Live Website Demonstration (3 Easy Workflows)</span>
+    <span class="act-time">1:45 – 3:30</span>
+  </div>
+  <div class="act-content">
+    <div class="action-box">
+      <strong>Workflow A (Case 3 - Search Village):</strong> Click 'Search Village / Place' &rarr; click 'Khapri' chip &rarr; click 'Analyze Village'. Within 3s, show the map zooming into Khapri with P1/P2 pins, blue catchment polygon, contour vectors, and the summary table.
+    </div>
+    <div class="speech-box">
+      "Let's see it in action! We support three user-friendly workflows:<br><br>
+      <strong>First, Zero-Effort Village Search:</strong> An administrator doesn't need GIS training. They simply type a village name—like 'Khapri'—or click our quick suggestion chip, and hit 'Analyze Village'. In just three seconds, the system fetches the Global DEM, runs the flow math, and displays the result! We see numbered markers <strong>P1 and P2</strong>, the <strong>blue shaded watershed catchment</strong>, and <strong>elevation contours</strong>. In the table below, Pond 1 with 1,052 mm annual rain will harvest over <strong>7,480 cubic meters</strong>—that's almost <strong>7.5 Megaliters</strong> of water!"
+    </div>
+    <div class="action-box" style="margin-top: 8px;">
+      <strong>Workflow B (Case 2 - Custom Area):</strong> Switch to 'Select Area on Map' &rarr; click 'Select Area on Map' &rarr; drag a rectangle over farmland &rarr; click 'Analyze Selected Area'.
+    </div>
+    <div class="speech-box">
+      "<strong>Second, Custom Farmland Drag:</strong> If a farmer wants to analyze their specific property, they simply click 'Select Area on Map', drag a rectangle right over their fields, and analyze! The app upsamples the terrain with smooth bicubic splines and identifies optimal ponds inside their parcel."
+    </div>
+    <div class="action-box" style="margin-top: 8px;">
+      <strong>Workflow C (Case 1 - Survey Upload):</strong> Switch to 'Upload Contour Map' &rarr; choose 'contours_1m.kml' &rarr; click 'Analyze Contour Map'.
+    </div>
+    <div class="speech-box">
+      "<strong>Third, Drone Survey Upload:</strong> If engineers have centimeter-accurate survey contours (.kml/.kmz), they upload them directly. Our system uses Inverse Distance Weighting to interpolate high-resolution 3D surfaces and deliver precise civil siting."
+    </div>
+  </div>
+</div>
+
+<!-- ACT 4 -->
+<div class="act-box">
+  <div class="act-header">
+    <span class="act-title">Act 4: Distributed Cluster Architecture & Instant Caching</span>
+    <span class="act-time">3:30 – 4:15</span>
+  </div>
+  <div class="act-content">
+    <div class="action-box">
+      <strong>Screen Action:</strong> Highlight the top status bar: 'Cluster Status: 3/3 Nodes Active'. Click 'Search Village' again and re-query 'Khapri' &rarr; point to the instant result in under 90 milliseconds!
+    </div>
+    <div class="speech-box">
+      "Behind the scenes, we engineered this for production scale:<br>
+      Heavy matrix calculations would freeze a standard web server. So we built a <strong>distributed 4-node cluster</strong>! <strong>System 1</strong> acts as the Gateway Master and Load Balancer, routing jobs across <strong>three backend compute workers</strong> on Systems 2, 3, and 4 via Round-Robin. If any worker node crashes, the gateway automatically fails over mid-flight without dropping user requests.<br><br>
+      Even better, look at this performance: While the first query for Khapri took 3.5 seconds, re-analyzing it now returns in <strong>under 90 milliseconds—a 43x speedup!</strong> That's our 24-hour persistent SQLite WAL cache with spatial coordinate quantization in action."
+    </div>
+  </div>
+</div>
+
+<!-- ACT 5 -->
+<div class="act-box">
+  <div class="act-header">
+    <span class="act-title">Act 5: Conclusion & Wrap-Up</span>
+    <span class="act-time">4:15 – 4:45</span>
+  </div>
+  <div class="act-content">
+    <div class="action-box">
+      <strong>Screen Action:</strong> Zoom out smoothly on the map showing the pond and catchment layers, then briefly switch to the GitHub repository page (https://github.com/jiyaa25/csd_asg_pond).
+    </div>
+    <div class="speech-box">
+      "In summary, this project combines digital elevation data, real-time meteorological APIs, and distributed graph algorithms to make rural rainwater harvesting accessible, scientific, and scalable.<br><br>
+      The complete source code, automated test suite, and technical report are available on GitHub at <strong>github.com/jiyaa25/csd_asg_pond</strong>.<br><br>
+      Thank you for watching!"
+    </div>
+  </div>
+</div>
+
+<div class="tips-box">
+  <h4>Quick Recording Checklist</h4>
+  <ul>
+    <li><strong>Screen Resolution:</strong> 1080p (Full HD) full-screen browser window.</li>
+    <li><strong>Audio Pace:</strong> Speak clearly at a calm, natural tempo (~130 words per minute).</li>
+    <li><strong>Visuals:</strong> Move your mouse smoothly; highlight the P1/P2 pins and the sub-90ms cache badge.</li>
+  </ul>
+</div>
+
+</body>
+</html>
