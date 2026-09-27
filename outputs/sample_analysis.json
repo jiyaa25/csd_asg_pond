@@ -24,6 +24,9 @@
       "catchment_area_square_meters": 16308.31,
       "catchment_area_hectares": 1.631,
       "catchment_cells": 27,
+      "expected_water_volume_m3": 5707.91,
+      "expected_water_volume_liters": 5707910.0,
+      "expected_water_volume_megaliters": 5.708,
       "distance_from_channel_m": 165.5,
       "catchment": {
         "area_square_meters": 16308.31,
@@ -32,6 +35,11 @@
         "min_elevation_m": 272.0,
         "max_elevation_m": 287.38,
         "mean_elevation_m": 279.55,
+        "expected_water_volume_m3": 5707.91,
+        "expected_water_volume_liters": 5707910.0,
+        "expected_water_volume_megaliters": 5.708,
+        "annual_rainfall_mm": 1000.0,
+        "runoff_coefficient": 0.35,
         "cells": [
           [
             [
@@ -639,6 +647,9 @@
       "catchment_area_square_meters": 14495.69,
       "catchment_area_hectares": 1.45,
       "catchment_cells": 24,
+      "expected_water_volume_m3": 5073.49,
+      "expected_water_volume_liters": 5073490.0,
+      "expected_water_volume_megaliters": 5.073,
       "distance_from_channel_m": 121.68,
       "catchment": {
         "area_square_meters": 14495.69,
@@ -647,6 +658,11 @@
         "min_elevation_m": 279.09,
         "max_elevation_m": 293.08,
         "mean_elevation_m": 286.33,
+        "expected_water_volume_m3": 5073.49,
+        "expected_water_volume_liters": 5073490.0,
+        "expected_water_volume_megaliters": 5.073,
+        "annual_rainfall_mm": 1000.0,
+        "runoff_coefficient": 0.35,
         "cells": [
           [
             [
@@ -1188,6 +1204,9 @@
       "catchment_area_square_meters": 18724.37,
       "catchment_area_hectares": 1.872,
       "catchment_cells": 31,
+      "expected_water_volume_m3": 6553.53,
+      "expected_water_volume_liters": 6553530.0,
+      "expected_water_volume_megaliters": 6.554,
       "distance_from_channel_m": 146.52,
       "catchment": {
         "area_square_meters": 18724.37,
@@ -1196,6 +1215,11 @@
         "min_elevation_m": 279.0,
         "max_elevation_m": 291.58,
         "mean_elevation_m": 283.32,
+        "expected_water_volume_m3": 6553.53,
+        "expected_water_volume_liters": 6553530.0,
+        "expected_water_volume_megaliters": 6.554,
+        "annual_rainfall_mm": 1000.0,
+        "runoff_coefficient": 0.35,
         "cells": [
           [
             [
@@ -1891,6 +1915,9 @@
       "catchment_area_square_meters": 13891.81,
       "catchment_area_hectares": 1.389,
       "catchment_cells": 23,
+      "expected_water_volume_m3": 4862.13,
+      "expected_water_volume_liters": 4862130.0,
+      "expected_water_volume_megaliters": 4.862,
       "distance_from_channel_m": 146.52,
       "catchment": {
         "area_square_meters": 13891.81,
@@ -1899,6 +1926,11 @@
         "min_elevation_m": 284.24,
         "max_elevation_m": 294.91,
         "mean_elevation_m": 289.62,
+        "expected_water_volume_m3": 4862.13,
+        "expected_water_volume_liters": 4862130.0,
+        "expected_water_volume_megaliters": 4.862,
+        "annual_rainfall_mm": 1000.0,
+        "runoff_coefficient": 0.35,
         "cells": [
           [
             [
@@ -2418,6 +2450,9 @@
       "catchment_area_square_meters": 17516.14,
       "catchment_area_hectares": 1.752,
       "catchment_cells": 29,
+      "expected_water_volume_m3": 6130.65,
+      "expected_water_volume_liters": 6130650.0,
+      "expected_water_volume_megaliters": 6.131,
       "distance_from_channel_m": 38.48,
       "catchment": {
         "area_square_meters": 17516.14,
@@ -2426,6 +2461,11 @@
         "min_elevation_m": 278.93,
         "max_elevation_m": 288.9,
         "mean_elevation_m": 284.95,
+        "expected_water_volume_m3": 6130.65,
+        "expected_water_volume_liters": 6130650.0,
+        "expected_water_volume_megaliters": 6.131,
+        "annual_rainfall_mm": 1000.0,
+        "runoff_coefficient": 0.35,
         "cells": [
           [
             [
@@ -3082,6 +3122,11 @@
     "min_elevation_m": 272.0,
     "max_elevation_m": 287.38,
     "mean_elevation_m": 279.55,
+    "expected_water_volume_m3": 5707.91,
+    "expected_water_volume_liters": 5707910.0,
+    "expected_water_volume_megaliters": 5.708,
+    "annual_rainfall_mm": 1000.0,
+    "runoff_coefficient": 0.35,
     "cells": [
       [
         [

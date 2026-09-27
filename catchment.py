@@ -138,7 +138,34 @@ def _cell_polygon(graph: TerrainGraph, node: TerrainNode) -> List[List[float]]:
     ]
 
 
-def delineate_catchment_bfs(graph: TerrainGraph, pond_node_id: int) -> Tuple[Set[int], Dict[str, Any]]:
+def calculate_water_volume(
+    area_square_meters: float,
+    annual_rainfall_mm: float = 1000.0,
+    runoff_coefficient: float = 0.35,
+) -> Dict[str, float]:
+    """Calculate expected collectable water volume using Rational runoff formula:
+    Volume (m³) = Catchment Area (m²) * Rainfall (m) * Runoff Coefficient
+    """
+    rainfall_m = max(0.0, float(annual_rainfall_mm)) / 1000.0
+    c = max(0.01, min(1.0, float(runoff_coefficient)))
+    vol_m3 = round(float(area_square_meters) * rainfall_m * c, 2)
+    vol_liters = round(vol_m3 * 1000.0, 1)
+    vol_megaliters = round(vol_m3 / 1000.0, 3)
+    return {
+        "volume_m3": vol_m3,
+        "volume_liters": vol_liters,
+        "volume_megaliters": vol_megaliters,
+        "annual_rainfall_mm": round(float(annual_rainfall_mm), 2),
+        "runoff_coefficient": round(c, 3),
+    }
+
+
+def delineate_catchment_bfs(
+    graph: TerrainGraph,
+    pond_node_id: int,
+    annual_rainfall_mm: float = 1000.0,
+    runoff_coefficient: float = 0.35,
+) -> Tuple[Set[int], Dict[str, Any]]:
     """Traverse reverse D8 flow edges to collect every cell draining to the pond."""
     catchment: Set[int] = {pond_node_id}
     queue = deque([pond_node_id])
@@ -153,6 +180,8 @@ def delineate_catchment_bfs(graph: TerrainGraph, pond_node_id: int) -> Tuple[Set
     area = sum(_cell_area_m2(graph, graph.nodes[node_id]) for node_id in catchment)
     elevations = [graph.nodes[node_id].elevation for node_id in catchment]
     cells = [_cell_polygon(graph, graph.nodes[node_id]) for node_id in sorted(catchment)]
+    vol_info = calculate_water_volume(area, annual_rainfall_mm, runoff_coefficient)
+
     metrics = {
         "area_square_meters": round(area, 2),
         "area_hectares": round(area / 10000.0, 3),
@@ -160,6 +189,11 @@ def delineate_catchment_bfs(graph: TerrainGraph, pond_node_id: int) -> Tuple[Set
         "min_elevation_m": round(float(min(elevations)), 2),
         "max_elevation_m": round(float(max(elevations)), 2),
         "mean_elevation_m": round(float(np.mean(elevations)), 2),
+        "expected_water_volume_m3": vol_info["volume_m3"],
+        "expected_water_volume_liters": vol_info["volume_liters"],
+        "expected_water_volume_megaliters": vol_info["volume_megaliters"],
+        "annual_rainfall_mm": vol_info["annual_rainfall_mm"],
+        "runoff_coefficient": vol_info["runoff_coefficient"],
         "cells": cells,
     }
     return catchment, metrics
@@ -251,6 +285,16 @@ def select_top_pond_candidates(
     candidates, stats = _candidate_pool(
         graph, flow_accumulation, river_nodes, ridge_nodes, safety_buffer_m, min_catchment_cells
     )
+    if not candidates:
+        # Graceful adaptive relaxation if buffer is too large for the region's channel density
+        candidates, stats = _candidate_pool(
+            graph, flow_accumulation, river_nodes, ridge_nodes, safety_buffer_m * 0.5, max(3, min_catchment_cells // 2)
+        )
+    if not candidates:
+        # Fallback to minimal buffer
+        candidates, stats = _candidate_pool(
+            graph, flow_accumulation, river_nodes, ridge_nodes, min(10.0, safety_buffer_m * 0.1), 2
+        )
     if not candidates:
         raise ValueError("No suitable pond candidate was found after river, ridge and catchment filtering.")
 

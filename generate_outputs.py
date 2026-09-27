@@ -37,6 +37,9 @@ def main():
             "catchment_area_square_meters": catchment["area_square_meters"],
             "catchment_area_hectares": catchment["area_hectares"],
             "catchment_cells": catchment["number_of_cells"],
+            "expected_water_volume_m3": catchment["expected_water_volume_m3"],
+            "expected_water_volume_liters": catchment["expected_water_volume_liters"],
+            "expected_water_volume_megaliters": catchment["expected_water_volume_megaliters"],
             "distance_from_channel_m": round(float(river_distance), 2),
             "catchment": catchment,
         })

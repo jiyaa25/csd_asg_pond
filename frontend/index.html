@@ -5,32 +5,102 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pond & Catchment Analyzer</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=5.0">
 </head>
 <body>
   <main class="page">
     <header class="hero">
       <div>
-        <p class="eyebrow">Terrain analysis demonstration</p>
+        <p class="eyebrow">Smart Catchment &amp; Terrain Analysis System</p>
         <h1>Pond &amp; Catchment Analyzer</h1>
-        <p class="subtitle">Upload a contour map and inspect terrain-derived pond candidates and their flow-based catchments.</p>
+        <p class="subtitle">Derive optimal pond locations, flow catchments, and expected water volumes across 3 flexible input workflows: KML contour upload, direct map area selection, or village name search.</p>
       </div>
     </header>
 
+    <!-- 3-Mode Selection Tabs -->
+    <div class="mode-tabs">
+      <button type="button" class="mode-tab active" data-mode="file">
+        <span class="mode-icon">📁</span>
+        <span class="mode-label">Case 1: Upload Contour Map</span>
+        <span class="mode-sub">KML / KMZ file</span>
+      </button>
+      <button type="button" class="mode-tab" data-mode="area">
+        <span class="mode-icon">📐</span>
+        <span class="mode-label">Case 2: Select Area on Map</span>
+        <span class="mode-sub">Global DEM elevation grid</span>
+      </button>
+      <button type="button" class="mode-tab" data-mode="village">
+        <span class="mode-icon">🔍</span>
+        <span class="mode-label">Case 3: Search Village / Place</span>
+        <span class="mode-sub">Auto geocode &amp; DEM query</span>
+      </button>
+    </div>
+
+    <!-- Mode-specific Quick Actions -->
+    <div id="villageSearchCard" class="search-card card hidden">
+      <div class="search-inner">
+        <div class="search-field">
+          <label for="villageInput"><strong>Village / Place Name</strong></label>
+          <div class="search-input-group">
+            <span class="search-icon-prefix">📍</span>
+            <input id="villageInput" type="text" placeholder="Type village name (e.g. Khapri, Bhilai, Patan, Durg, Raipur)..." autocomplete="off">
+            <button type="button" id="villageSearchBtn" class="primary search-action-btn">🔍 Search &amp; Analyze</button>
+          </div>
+        </div>
+        <div class="search-hints">
+          <span class="hint-label">Quick suggestions:</span>
+          <button type="button" class="hint-chip" onclick="fillVillage('Khapri, Chhattisgarh')">Khapri</button>
+          <button type="button" class="hint-chip" onclick="fillVillage('Patan, Chhattisgarh')">Patan</button>
+          <button type="button" class="hint-chip" onclick="fillVillage('Bhilai, Chhattisgarh')">Bhilai</button>
+          <button type="button" class="hint-chip" onclick="fillVillage('Kumhari, Chhattisgarh')">Kumhari</button>
+        </div>
+      </div>
+    </div>
+
     <section class="controls card">
-      <div class="control-group file-group">
-        <label for="contourFile">Contour Map</label>
+      <div id="fileControlGroup" class="control-group file-group">
+        <label for="contourFile">Contour Map (KML/KMZ)</label>
         <input id="contourFile" type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz">
-        <span id="fileName" class="file-name">No file selected</span>
+        <span id="fileName" class="file-name">No file selected (optional in Area/Village modes)</span>
       </div>
-      <div class="control-group">
-        <label for="riverDistance">Minimum Distance From River (meters)</label>
-        <input id="riverDistance" type="number" min="0.1" step="0.1" value="30">
+
+      <div class="control-group area-control-group">
+        <label>Land Area Selection</label>
+        <div class="area-btn-row">
+          <button type="button" id="selectAreaBtn" class="secondary">📐 Select Area on Map</button>
+          <button type="button" id="clearAreaBtn" class="secondary hidden">✕ Reset</button>
+        </div>
+        <span id="areaStatus" class="area-status-badge">Entire contour area</span>
       </div>
+
       <div class="control-group">
-        <label for="pondCount">Number of Pond Locations</label>
+        <label for="riverDistance">Drainage Safety Buffer (m)</label>
+        <input id="riverDistance" type="number" min="0.1" step="0.1" value="200">
+      </div>
+
+      <div class="control-group">
+        <label for="pondCount">Number of Ponds</label>
         <input id="pondCount" type="number" min="1" max="50" step="1" value="5">
       </div>
+
+      <div class="control-group">
+        <label for="rainfallInput">Annual Rainfall (mm) <span id="rainfallApiStatus" class="api-tag">API Auto</span></label>
+        <div class="input-with-btn">
+          <input id="rainfallInput" type="number" min="50" max="5000" step="10" placeholder="Auto-fetching API..." value="1289">
+          <button type="button" id="refreshRainfallBtn" class="icon-btn" title="Refresh rainfall from Open-Meteo / NASA API">🔄</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label for="runoffSelect">Runoff Coefficient (C)</label>
+        <select id="runoffSelect">
+          <option value="0.40" selected>0.40 — Clay/Silt Loam (Agricultural standard)</option>
+          <option value="0.30">0.30 — Sandy Loam (Vegetation cover)</option>
+          <option value="0.50">0.50 — Hard Clay soils</option>
+          <option value="0.60">0.60 — Barren / High-slope clay</option>
+        </select>
+      </div>
+
       <button id="analyzeButton" class="primary">Analyze Map</button>
     </section>
 
@@ -40,14 +110,19 @@
       <div class="map-card card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Visual inspection</p>
-            <h2>Terrain-derived Pond Candidates</h2>
+            <p class="eyebrow">Visual inspection &amp; GIS Overlay</p>
+            <h2>Pond Location, Catchment &amp; Water Volume Map</h2>
           </div>
           <div class="legend">
-            <span><i class="legend-dot"></i> Pond location</span>
+            <span><i class="legend-area"></i> Selected Area</span>
+            <span><i class="legend-dot"></i> Pond candidate</span>
             <span><i class="legend-box"></i> Catchment</span>
-            <span><i class="legend-line"></i> Drainage / channel</span>
+            <span><i class="legend-line"></i> Drainage channel</span>
+            <span><i class="legend-dem-contour"></i> DEM Contours</span>
           </div>
+        </div>
+        <div id="mapInstruction" class="map-instruction hidden">
+          Click and drag (or click two opposite corners) on the map to define your land area of interest.
         </div>
         <div id="map"></div>
       </div>
@@ -66,21 +141,31 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Rank</th><th>Latitude</th><th>Longitude</th><th>Elevation</th><th>Score</th><th>Catchment</th></tr>
+                <tr>
+                  <th>Rank</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                  <th>Elevation</th>
+                  <th>Score</th>
+                  <th>Catchment</th>
+                  <th>Expected Water Volume</th>
+                </tr>
               </thead>
-              <tbody id="pondTable"><tr><td colspan="6" class="muted">No results yet.</td></tr></tbody>
+              <tbody id="pondTable"><tr><td colspan="7" class="muted">No results yet.</td></tr></tbody>
             </table>
           </div>
         </section>
 
         <section class="note">
-          These locations are terrain-derived candidates based on contour interpolation, terrain flow, catchment connectivity and drainage exclusion. They are not engineering-grade hydrological recommendations.
+          <strong>Hydrological estimation:</strong> Expected water volume is computed via the Rational runoff method:
+          <code>Volume = Catchment Area × Annual Rainfall × Runoff Coefficient</code>.
+          Pond locations and catchments are derived from contour IDW / Global DEM interpolation and D8 reverse-flow routing.
         </section>
       </aside>
     </section>
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=5.0"></script>
 </body>
 </html>

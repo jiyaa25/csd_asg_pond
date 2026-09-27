@@ -97,3 +97,99 @@ def test_api_top_n_candidates_are_ranked_and_distinct():
     coords = {(p["latitude"], p["longitude"]) for p in ponds}
     assert len(coords) == len(ponds)
     assert data["analysis"]["requested_ponds"] == 3
+
+
+def test_api_expected_water_volume_and_contour_map_field():
+    kml_bytes = create_synthetic_kml(elevations=[100.0, 105.0, 110.0, 115.0, 120.0])
+    response = client.post(
+        "/analyzeContour?drainage_safety_buffer_m=10.0&annual_rainfall_mm=1200&runoff_coefficient=0.4",
+        files={"contour_map": ("test_contours.kml", kml_bytes, "application/vnd.google-earth.kml+xml")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "water_volume_parameters" in data
+    assert data["water_volume_parameters"]["annual_rainfall_mm"] == 1200.0
+    assert data["water_volume_parameters"]["runoff_coefficient"] == 0.4
+    best = data["pond_location"]
+    assert "expected_water_volume_m3" in best
+    assert best["expected_water_volume_m3"] > 0.0
+    first_pond = data["pond_locations"][0]
+    assert first_pond["expected_water_volume_m3"] == best["expected_water_volume_m3"]
+    assert first_pond["expected_water_volume_megaliters"] > 0.0
+
+
+def test_api_selected_land_area():
+    kml_bytes = create_synthetic_kml(elevations=[100.0, 105.0, 110.0, 115.0, 120.0])
+    response = client.post(
+        "/analyzeContour?drainage_safety_buffer_m=5.0&selected_min_lat=21.002&selected_max_lat=21.008&selected_min_lon=81.002&selected_max_lon=81.008",
+        files={"contour_map": ("test_contours.kml", kml_bytes, "application/vnd.google-earth.kml+xml")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["input"]["selected_land_area"] is not None
+    assert data["input"]["selected_land_area"]["min_lat"] >= 21.002
+    assert data["input"]["selected_land_area"]["max_lat"] <= 21.008
+
+
+def test_api_rainfall_endpoint():
+    response = client.get("/api/rainfall?lat=21.25&lon=81.30")
+    assert response.status_code == 200
+    data = response.json()
+    assert "annual_rainfall_mm" in data
+    assert data["annual_rainfall_mm"] > 0
+    assert "source" in data
+
+
+def test_api_geocode_endpoint():
+    response = client.get("/api/geocode?q=Khapri")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "result" in data
+    res = data["result"]
+    assert "bounds" in res
+    assert res["bounds"]["min_lat"] < res["bounds"]["max_lat"]
+    assert res["bounds"]["min_lon"] < res["bounds"]["max_lon"]
+
+
+def test_api_analyze_area_and_place(monkeypatch):
+    import main
+
+    kml_bytes = create_synthetic_kml(elevations=[100.0, 105.0, 110.0, 115.0, 120.0])
+    contours, bounds, _ = parse_kml_or_kmz(kml_bytes, "test.kml")
+    mock_terrain = build_terrain_grid(contours, bounds, grid_size=20)
+    mock_contours = [{"elevation": 100.0, "coordinates": [[21.05, 81.05], [21.06, 81.06]]}]
+
+    monkeypatch.setattr(main, "fetch_dem_elevation_grid", lambda b, query_dim=15, target_dim=50: (mock_terrain, mock_contours))
+    monkeypatch.setattr(
+        main,
+        "geocode_place",
+        lambda q: {
+            "display_name": f"{q}, Mock State, India",
+            "latitude": 21.05,
+            "longitude": 81.05,
+            "bounds": bounds,
+        }
+    )
+
+    # Test Case 2: analyzeArea
+    res_area = client.post(
+        "/analyzeArea?selected_min_lat=21.0&selected_max_lat=21.01&selected_min_lon=81.0&selected_max_lon=81.01&number_of_ponds=1&drainage_safety_buffer_m=5.0"
+    )
+    assert res_area.status_code == 200, res_area.json()
+    data_area = res_area.json()
+    assert data_area["status"] == "success"
+    assert data_area["input"]["mode"] == "map_area_dem"
+    assert "generated_contours" in data_area
+    assert len(data_area["pond_locations"]) == 1
+
+    # Test Case 3: analyzePlace
+    res_place = client.post("/analyzePlace?place_name=Khapri&number_of_ponds=1&drainage_safety_buffer_m=5.0")
+    assert res_place.status_code == 200, res_place.json()
+    data_place = res_place.json()
+    assert data_place["status"] == "success"
+    assert data_place["input"]["mode"] == "village_search_dem"
+    assert "Khapri" in data_place["input"]["place_name"]
+    assert "generated_contours" in data_place
+
+

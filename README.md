@@ -1,291 +1,127 @@
-# Pond Location and Catchment Detection
+# Pond Location and Catchment Detection System
 
-A FastAPI-based terrain analysis system that accepts KML/KMZ contour maps, identifies terrain-derived pond candidates, and estimates their upstream catchment areas using flow-based terrain analysis.
+A high-performance FastAPI and GIS terrain analysis web application that determines optimal pond candidates, flow catchments, and expected harvestable water volumes across **3 flexible workflows**:
 
-## 1. Project Overview
+1. **Case 1: Contour Map Upload** — Upload `.kml` or `.kmz` contour maps.
+2. **Case 2: Interactive Map Area Selection** — Select any custom bounding box on Leaflet; backend queries a Global Digital Elevation Model (DEM), derives elevation grids and vector contours, and runs hydrological analysis.
+3. **Case 3: Village / Place Search** — Search any village, town, or city name; backend geocodes via OpenStreetMap Nominatim, retrieves DEM elevation grid & contours, fetches live agro-climatological rainfall, and computes pond locations and catchments automatically.
 
-The system performs the following pipeline:
+---
+
+## 1. System Architecture & Workflows
 
 ```text
-KML/KMZ Contour Map
-        ↓
-Contour & Elevation Extraction
-        ↓
-IDW Terrain Interpolation
-        ↓
-8-Neighbour Terrain Graph
-        ↓
-D8 Flow Routing
-        ↓
-Flow Accumulation
-        ↓
-Drainage/Channel Detection
-        ↓
-Pond Candidate Selection & Filtering
-        ↓
-Top-N Pond Selection
-        ↓
-Reverse-Flow Catchment Detection
-        ↓
-Catchment Area Calculation
-        ↓
-JSON Response
+========================================================================================
+                                 INPUT WORKFLOWS
+========================================================================================
+  [Case 1: KML / KMZ Upload]       [Case 2: Select Bounding Box]     [Case 3: Search Village]
+              │                                   │                              │
+     Extract Contour Paths               Query Global DEM API             OSM Nominatim Geocode
+     & Measured Heights              (lat/lon bounding box)               (lat/lon & bounds)
+              │                                   │                              │
+    IDW Terrain Interpolation         Bicubic Spline Grid Zoom                   │
+              │                                   │                              │
+              │                       Vectorize Contour Lines ◄──────────────────┘
+              │                       (matplotlib QuadContour)
+              ▼                                   ▼
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                            UNIFIED HYDROLOGICAL PIPELINE                             │
+│                                                                                      │
+│  1. 8-Neighbour Surface Graph (WGS84 spherical distances)                            │
+│  2. D8 Downhill Flow Routing & Topographic Gradient Determination                    │
+│  3. Flow Accumulation Matrix & Stream Network Extraction                             │
+│  4. River Channel & Ridge Line Exclusion Masking                                     │
+│  5. Multi-criteria Pond Suitability Scoring & Minimum Spatial Separation             │
+│  6. Upstream Reverse-Flow BFS Catchment Delineation                                  │
+│  7. Rational Method Water Volume: Volume = Catchment Area × Rainfall × Runoff (C)    │
+│  8. Dynamic Climate Rainfall: Open-Meteo Archive API + NASA POWER Climatology        │
+└───────────────────────────────────┬──────────────────────────────────────────────────┘
+                                    ▼
+       Interactive Leaflet GIS Web App Overlay & Structured JSON Response
 ```
 
-The catchment is calculated from the terrain-derived flow network rather than using a circular buffer.
+---
 
 ## 2. Project Structure
 
 ```text
 csd_asg_pond/
-├── main.py
-├── contour_parser.py
-├── terrain.py
-├── graph.py
-├── catchment.py
-├── generate_outputs.py
-├── requirements.txt
-├── contours_1m.kml
+├── main.py                 # FastAPI application, CORS, routing, unified analysis pipeline
+├── contour_parser.py       # XML/KML/KMZ extraction of contour LineStrings and heights
+├── terrain.py              # TerrainGrid representation and IDW interpolation
+├── graph.py                # 8-neighbour terrain graph with D8 flow routing
+├── catchment.py            # Flow accumulation, channel detection, BFS catchment routing, volume
+├── rainfall_service.py     # Live climate rainfall service (Open-Meteo & NASA POWER Climatology)
+├── dem_service.py          # Global DEM elevation grid fetching, bicubic zoom & contour vectorization
+├── generate_outputs.py     # Batch pipeline runner saving JSON output for sample maps
+├── requirements.txt        # Production dependencies
+├── contours_1m.kml         # Sample contour map
 ├── frontend/
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
+│   ├── index.html          # Web UI with 3 workflow mode tabs, village search, and GIS map
+│   ├── style.css           # Modern aesthetic stylesheet with dark/light visual cues
+│   └── app.js              # Leaflet integration, area drag-select, contour rendering, table
 ├── tests/
-│   ├── __init__.py
-│   ├── test_parser.py
-│   └── test_all.py
-├── outputs/
-│   └── sample_analysis.json
-├── README.md
-└── REPORT.md
+│   ├── test_parser.py      # Unit tests for KML/KMZ parser and edge cases
+│   └── test_all.py         # End-to-end tests for all 3 workflows, APIs, and hydrology
+└── outputs/
+    └── sample_analysis.json# Precomputed sample analysis output
 ```
 
-Temporary files such as virtual environments, Python caches and IDE folders should not be submitted.
+---
 
-## 3. Backend
+## 3. Endpoints & API Reference
 
-The backend is implemented using **FastAPI**.
-
-It performs:
-
-* KML/KMZ contour parsing
-* Elevation extraction
-* IDW terrain interpolation
-* 8-neighbour terrain graph construction
-* D8 downhill flow routing
-* Flow accumulation
-* Drainage/channel detection
-* Pond candidate filtering and scoring
-* Spatially separated pond selection
-* Reverse-flow BFS catchment detection
-* Geographic catchment area calculation
-
-## 4. API Endpoint
-
-### `POST /analyzeContour`
-
-**Hosted API:**
-
-```text
-http://10.1.75.79:5261/analyzeContour
-```
-
-The endpoint accepts a KML or KMZ file using the multipart form-data field:
-
-```text
-contour_map
-```
-
-### Query Parameters
-
-| Parameter                  | Type    | Default | Description                                     |
-| -------------------------- | ------- | ------: | ----------------------------------------------- |
-| `drainage_safety_buffer_m` | Float   |   `200` | Minimum distance from detected drainage/channel |
-| `number_of_ponds`          | Integer |     `5` | Number of pond candidates to return             |
-
-### Example Request
-
-```text
-POST http://10.1.75.79:5261/analyzeContour
-```
-
-Use `multipart/form-data`:
-
-```text
-contour_map → KML/KMZ file
-```
-
-The default values are:
-
-```text
-drainage_safety_buffer_m = 200
-number_of_ponds = 5
-```
-
-They can also be specified explicitly:
-
-```text
-POST http://10.1.75.79:5261/analyzeContour?drainage_safety_buffer_m=200&number_of_ponds=5
-```
-
-## 5. Testing Through Postman
-
-1. Open Postman.
-2. Select **POST**.
-3. Enter:
-
-```text
-http://10.1.75.79:5261/analyzeContour
-```
-
-4. Go to **Body → form-data**.
-5. Add:
-
-```text
-Key: contour_map
-Type: File
-Value: contours_1m.kml
-```
-
-6. Send the request.
-
-The API returns a JSON response containing the analysis results.
-
-## 6. Swagger Documentation
-
-Interactive API documentation is available at:
-
-```text
-http://10.1.75.79:5261/docs
-```
-
-From Swagger, the `POST /analyzeContour` endpoint can be tested by uploading a KML/KMZ contour map and providing the analysis parameters.
-
-## 7. Response
-
-A successful response contains information such as:
-
-```json
-{
-  "status": "success",
-  "input": {
-    "filename": "contours_1m.kml"
-  },
-  "pond_locations": [
-    {
-      "rank": 1,
-      "latitude": "...",
-      "longitude": "...",
-      "elevation": "...",
-      "suitability_score": "...",
-      "catchment_area_square_meters": "...",
-      "catchment_area_hectares": "...",
-      "catchment_cells": "...",
-      "distance_from_channel_m": "..."
-    }
-  ]
-}
-```
-
-The response also includes catchment cell geometry and analysis statistics.
-
-## 8. Frontend
-
-The project includes a simple Leaflet-based frontend for visualization.
-
-It allows the user to:
-
-* Upload a KML/KMZ contour map
-* Set the drainage safety distance
-* Select the number of pond candidates
-* View ranked pond locations
-* View catchment regions
-* View drainage/channel information
-* Inspect pond properties on the map
-
-The frontend communicates with the same FastAPI backend.
-
-## 9. Running Locally
-
-### Linux/macOS
-
-```bash
-git clone https://github.com/jiyaa25/csd_asg_pond.git
-cd csd_asg_pond
-
-python3 -m venv venv
-source venv/bin/activate
-
-pip install -r requirements.txt
-python main.py
-```
-
-### Windows
-
-```powershell
-git clone https://github.com/jiyaa25/csd_asg_pond.git
-cd csd_asg_pond
-
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-pip install -r requirements.txt
-python main.py
-```
-
-The application will start using the configured FastAPI port.
-
-## 10. Testing
-
-Run the automated tests using:
-
-```bash
-pytest -q
-```
-
-A sample analysis can also be generated using:
-
-```bash
-python generate_outputs.py
-```
-
-This processes `contours_1m.kml` and generates:
-
-```text
-outputs/sample_analysis.json
-```
-
-## 11. Important Limitations
-
-* IDW interpolation creates an estimated elevation surface between contour lines.
-* D8 flow routing is a simplified terrain-flow model.
-* Flow accumulation is used as a terrain-based indicator of drainage/channel areas.
-* The 200 m drainage distance is an academic screening parameter, not an engineering or legal setback.
-* Catchment areas are approximate and depend on the contour data and grid resolution.
-* The identified locations are terrain-derived pond candidates and are not guaranteed engineering-grade pond sites.
-
-## 12. Repository
-
-GitHub Repository:
-
-```text
-https://github.com/jiyaa25/csd_asg_pond
-```
-
-Hosted API:
-
+### Hosted Web Interface & API Base
 ```text
 http://10.1.75.79:5261/
 ```
 
-API Endpoint:
+### Endpoints
 
-```text
-POST http://10.1.75.79:5261/analyzeContour
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Web GIS Application (Leaflet UI) |
+| `GET` | `/health` | System health check (`{"status": "healthy"}`) |
+| `GET` | `/api/rainfall` | Fetch dynamic rainfall for coordinates (`lat`, `lon`) |
+| `GET` | `/api/geocode` | Geocode village/place name to geographic bounding box (`q`) |
+| `POST`| `/analyzeContour` | Universal endpoint supporting KML upload, selected area, or village name |
+| `POST`| `/analyzeArea` | Case 2: Direct DEM query for map bounding box |
+| `POST`| `/analyzePlace` | Case 3: Village search DEM query & catchment analysis |
+
+---
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :---: | :--- |
+| `drainage_safety_buffer_m` | Float | `200.0` | Minimum clearance from natural streams/channels |
+| `number_of_ponds` | Integer | `5` | Number of top spatially separated pond candidates |
+| `annual_rainfall_mm` | Float | *Auto* | Expected annual precipitation (auto-fetched from climate API if omitted) |
+| `runoff_coefficient` | Float | `0.40` | Rational runoff coefficient $C$ (0.30 Sandy Loam, 0.40 Clay/Silt Loam, 0.50 Hard Clay, 0.60 Barren) |
+| `selected_min_lat`, `selected_max_lat` | Float | *None* | Bounding latitudes for land area of interest |
+| `selected_min_lon`, `selected_max_lon` | Float | *None* | Bounding longitudes for land area of interest |
+
+---
+
+## 4. Hydrological Formulas
+
+### Expected Water Volume (Rational Method)
+$$\text{Expected Water Volume } (V) = A \times R \times C$$
+- $A$ = Catchment Area ($m^2$) delineated via reverse-flow BFS
+- $R$ = Annual Precipitation ($m = \text{mm} / 1000$) fetched dynamically from Open-Meteo / NASA POWER API
+- $C$ = Runoff Coefficient (dimensionless ratio between $0.01$ and $1.0$)
+
+---
+
+## 5. Running & Verification
+
+### Running the Server Locally
+```bash
+uvicorn main:app --host 0.0.0.0 --port 5000 --reload
 ```
 
-Swagger:
-
-```text
-http://10.1.75.79:5261/docs
+### Running Test Suite
+```bash
+pytest tests/ -v
 ```
+All 15 automated test cases validate parsing, flow routing, rainfall API fallback, geocoding, and DEM terrain analysis.
