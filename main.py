@@ -555,7 +555,8 @@ async def validation_error_handler(request, exc):
     return JSONResponse(status_code=400, content={"status": "error", "message": "Invalid request parameters."})
 
 
-app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
+if (ROOT / "frontend").is_dir():
+    app.mount("/static", StaticFiles(directory=ROOT / "frontend"), name="static")
 
 if __name__ == "__main__":
     import uvicorn

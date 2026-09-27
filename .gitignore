@@ -8,3 +8,5 @@ __pycache__/
 .idea/
 .DS_Storeserver.log
 server.log
+*.db
+cache.db

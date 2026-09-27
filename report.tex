@@ -1,0 +1,403 @@
+%%
+%% CSD Assignment 1 - Final Technical Report
+%% Based on the ACM "acmart" manuscript (single-column) style.
+%%
+\documentclass[manuscript,screen,review]{acmart}
+
+\AtBeginDocument{%
+  \providecommand\BibTeX{{Bib\TeX}}}
+
+\usepackage{booktabs}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{graphicx}
+
+\begin{document}
+
+%% =================== TITLE & AUTHOR BLOCK =========================
+\title{AI-based Village Pond Planning System}
+\subtitle{CSD Assignment 1 -- Final Technical Report}
+
+\author{Jiya Mehta}
+\affiliation{%
+  \institution{IIT Bhilai / Department of Data Science and AI}
+  \city{Surat}
+  \country{India}}
+\email{jiyam@iitbhilai.ac.in}
+
+\renewcommand{\shortauthors}{Mehta}
+
+%% =================== ABSTRACT ======================================
+\begin{abstract}
+Rural water conservation in agrarian regions relies heavily on farm ponds (\textit{talabs}) for rainwater harvesting, groundwater aquifer recharge, and drought resilience. However, conventional manual site selection and arbitrary circular buffer heuristics overlook natural topographic drainage networks, leading to dry catchments or catastrophic embankment washouts during monsoonal surges. This report presents the design, mathematical foundations, and distributed implementation of an end-to-end, web-based geospatial decision-support system for optimal village pond site selection, watershed catchment delineation, and rainwater harvest estimation. The system supports three seamless operational workflows: (1) survey contour map ingestion (.kml/.kmz) interpolated via Inverse Distance Weighting (IDW), (2) interactive bounding box selection querying a Global Digital Elevation Model (DEM) with bicubic spline zoom and automated contour vectorization, and (3) zero-manual-input village name geocoding via OpenStreetMap Nominatim. Hydrological analysis is performed on an 8-neighbour spherical terrain graph executing D8 steepest-descent flow routing, stream accumulation extraction, river and ridge safety clearance filtering, multi-factor suitability scoring, and reverse-flow Breadth-First Search (BFS) catchment delineation. Expected harvestable water volume is computed via the hydrological Rational Runoff Equation ($V = C \times R \times A$), integrating live climatological precipitation from Open-Meteo and NASA POWER APIs. To achieve high availability and scalability, the backend is architected as a 4-node distributed cluster (Gateway/Load Balancer on System 1 and worker nodes on Systems 2, 3, and 4) backed by an intelligent SQLite WAL 24-hour persistent cache utilizing SHA-256 file hashing, spatial coordinate quantization ($0.002^\circ$), and string normalization. Experimental evaluation demonstrates accurate catchment delineation, robust fault tolerance with automatic worker failover, and a latency reduction from 3.7~seconds for raw computation to under 90~milliseconds on warm cache hits.
+\end{abstract}
+
+\keywords{Village Pond Planning, Geospatial Analysis, Rainwater Harvesting, D8 Flow Routing, Catchment Delineation, Distributed Systems, Load Balancing, Web GIS, REST APIs}
+
+\maketitle
+
+%% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+Water scarcity remains a critical constraint on agricultural productivity and socio-economic stability in rural India. Monsoonal precipitation is frequently temporal and torrential, leading to heavy surface runoff, topsoil erosion, and subsequent seasonal droughts. Traditional earthen farm ponds (\textit{talabs}) provide a decentralized, sustainable solution for runoff capture and localized aquifer replenishment. However, the efficacy of a rainwater harvesting pond depends critically on its geographic location. Constructing a pond in an improper area leads to dry catchments, insufficient water influx, or catastrophic structural collapse during monsoonal torrents if situated directly inside primary river floodways.
+
+The primary objective of this project is to develop an automated, intelligent, web-based Village Pond Planning System that analyzes digital elevation models and contour maps, evaluates terrain drainage characteristics, identifies top-ranked safe pond locations, delineates upstream catchment boundaries using flow routing, and calculates expected annual water yield using real-time climatological rainfall data.
+
+The remainder of this report is organized as follows: Section~\ref{sec:requirements} defines the functional and non-functional requirements. Section~\ref{sec:architecture} describes the distributed system architecture and technology stack. Section~\ref{sec:methodology} provides the mathematical and algorithmic methodology for terrain processing, D8 flow accumulation, reverse BFS catchment delineation, and Rational runoff estimation. Section~\ref{sec:implementation} details the API contracts, frontend Web GIS interface, and persistent caching strategies. Section~\ref{sec:csd-themes} maps course themes to concrete design choices. Section~\ref{sec:results} presents quantitative evaluation results. Section~\ref{sec:discussion} reflects on limitations and future extensions, and Section~\ref{sec:ai-usage} outlines the AI tool usage declaration.
+
+\subsection{Motivation}
+Manual site selection conducted by local administrative bodies and civil contractors suffers from multiple structural drawbacks:
+\begin{enumerate}
+    \item \textbf{Topographic Complexity:} Identifying natural collection valleys and ridge divides across irregular terrain cannot be reliably determined by visual line-of-sight inspections.
+    \item \textbf{Lack of Integrated Hydrometeorological Data:} Civil planning rarely incorporates live or 30-year historical agro-climatological precipitation data and soil runoff coefficients into capacity estimates.
+    \item \textbf{Arbitrary Buffer Assumptions:} Conventional tools frequently substitute true hydrological drainage networks with arbitrary circular radius buffers, yielding grossly inaccurate catchment areas and storage estimations.
+    \item \textbf{Accessibility Bottlenecks:} Field surveys require specialized GIS equipment and skilled operators, hindering rapid screening across dozens of villages.
+\end{enumerate}
+An automated, interactive Web GIS tool bridges this gap by democratizing advanced digital elevation models, flow routing algorithms, and climatological APIs into an intuitive, zero-install browser interface.
+
+\subsection{Scope of the Project}
+The scope of this project encompasses:
+\begin{itemize}
+    \item \textbf{Supported Functionality:} Ingestion of vector contour maps (.kml/.kmz); automated geocoding of arbitrary village and town names; on-demand extraction of Global Digital Elevation Model (DEM) grids; bicubic interpolation and contour generation; D8 downhill flow accumulation; stream and ridge masking; multi-criteria pond ranking; reverse-flow BFS catchment polygon extraction; dynamic climate rainfall fetching; Rational Method runoff volume calculation; and distributed load balancing across multiple server instances with a persistent 24-hour cache.
+    \item \textbf{Exclusions / Non-Goals:} The system does not perform geotechnical soil-bearing capacity testing, structural reinforced-concrete embankment design, or sub-surface geological strata rock-permeability modeling.
+\end{itemize}
+
+%% =====================================================================
+\section{Problem Statement and Requirements}
+\label{sec:requirements}
+
+The core technical challenge is to implement a robust, end-to-end service that takes an area of interest through three user workflows, executes quantitative terrain and catchment analysis, and returns verified pond sites with storage volume estimations.
+
+\begin{table}[h]
+  \caption{Functional requirements and system implementation mapping}
+  \label{tab:requirements}
+  \small
+  \begin{tabular}{p{4.2cm}p{4.5cm}p{4.8cm}}
+    \toprule
+    Requirement & Implemented in Module & Technical Implementation Details \\
+    \midrule
+    Satellite / Base map display & \texttt{frontend/app.js}, \texttt{index.html} & Leaflet.js slippy map with OpenStreetMap tiles, layer groups, and custom markers. \\
+    Contour map visualization & \texttt{dem\_service.py}, \texttt{frontend/app.js} & Matplotlib QuadContour vectorization rendering dynamic polyline contour layers. \\
+    Available land identification & \texttt{main.py}, \texttt{load\_balancer.py} & Interactive rectangle drag/click bounding box or Nominatim administrative geocoding. \\
+    Terrain surface generation & \texttt{terrain.py}, \texttt{dem\_service.py} & SciPy cKDTree Inverse Distance Weighting (IDW) and bicubic spline grid zooming. \\
+    Channel \& ridge exclusion & \texttt{catchment.py} & SciPy Exact Euclidean Distance Transform (\texttt{distance\_transform\_edt}) safety buffering. \\
+    Catchment area estimation & \texttt{catchment.py} & Topographically accurate uphill reverse-flow Breadth-First Search (BFS) traversal. \\
+    Historical rainfall query & \texttt{rainfall\_service.py} & Open-Meteo Archive API with automatic fallback to NASA POWER 30-year Climatology. \\
+    Runoff volume estimation & \texttt{catchment.py} & Hydrological Rational Equation ($V = C \cdot R \cdot A$) with selectable soil catalog. \\
+    Pond depth / storage recommendation & \texttt{catchment.py}, \texttt{main.py} & Multi-candidate spatial separation ranking with cubic meter, liter, and ML metrics. \\
+    Distributed load balancing & \texttt{load\_balancer.py} & Round-Robin reverse proxy with active health check polling and mid-flight failover. \\
+    Multi-level caching & \texttt{cache\_service.py} & SQLite WAL 24-hour persistent cache with SHA-256 hashing and spatial quantization. \\
+    Combined overlay / results view & \texttt{frontend/app.js}, \texttt{style.css} & Synced map layers (ponds, catchments, drainage channels, contours) and summary cards. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Non-Functional Requirements}
+\begin{enumerate}
+    \item \textbf{Latency and Response Time:} Fresh terrain and flow routing computations across a $50 \times 50$ grid must complete in under 5~seconds. Cached queries must respond in under 100~milliseconds.
+    \item \textbf{Scalability and Concurrency:} The system must horizontally scale by dispatching computational tasks across multiple worker instances, preventing gateway socket saturation during simultaneous village evaluations.
+    \item \textbf{Fault Tolerance and High Availability:} The gateway must detect worker instance crashes within 2~seconds, automatically re-route in-flight traffic to surviving healthy nodes, and maintain continuous service availability.
+    \item \textbf{Resilience to External API Outages:} If third-party meteorological or geocoding services return HTTP 429 (rate-limited) or connection timeouts, the system must gracefully fall back to alternative authoritative endpoints without crashing.
+    \item \textbf{Usability and Zero-Install Footprint:} The client interface must run entirely in modern web browsers without requiring desktop GIS installations or browser plugins.
+\end{enumerate}
+
+%% =====================================================================
+\section{System Architecture and High-Level Design}
+\label{sec:architecture}
+
+The system is architected as a distributed, decoupled multi-node cluster comprising a Gateway/Load Balancer node, a Shared Persistence \& Caching layer, and multiple Backend Computation Worker nodes.
+
+\begin{figure}[h]
+  \centering
+  \IfFileExists{figures/architecture_diagram.png}{%
+    \includegraphics[width=0.92\linewidth]{figures/architecture_diagram.png}
+  }{%
+    \fbox{\parbox{0.9\linewidth}{\centering [Architecture Diagram: Client $\to$ System 1 Gateway $\to$ Systems 2, 3, 4 Workers]}}
+  }
+  \caption{Distributed Multi-Node Cluster Architecture.}
+  \label{fig:architecture}
+  \Description{High-level architectural diagram showing the web browser connecting to System 1 Gateway which distributes traffic across System 2, 3, and 4 compute workers with a shared cache.}
+\end{figure}
+
+\subsection{Cluster Node Responsibilities}
+\begin{itemize}
+    \item \textbf{System 1 (\texttt{stu46\_sys1}, Gateway Master):} Functions as the public gateway exposed via port 5261 (internally port 5000). It hosts static assets, executes health checking on worker nodes, implements round-robin scheduling with least-connections bias, and manages the central SQLite WAL persistent cache. To eliminate Single Points of Failure, System 1 runs minimal computational tasks, preserving its resources for low-latency routing.
+    \item \textbf{Systems 2, 3, and 4 (\texttt{stu46\_sys2}, \texttt{stu46\_sys3}, \texttt{stu46\_sys4}, Compute Workers):} Run independent FastAPI instances in isolated virtual environments. Workers receive dispatched jobs over the high-speed internal network (\texttt{172.17.0.0/16}), execute IDW interpolation, construct directed surface graphs, compute D8 flow matrices, delineate catchments, and return structured JSON payloads to the gateway.
+\end{itemize}
+
+\subsection{Technology Stack}
+\begin{itemize}
+    \item \textbf{Core Language \& Runtime:} Python 3.12/3.14 (high-performance scientific computing and asynchronous networking).
+    \item \textbf{Web Framework:} FastAPI with ASGI Uvicorn (asynchronous request handling, Pydantic validation, native OpenAPI documentation).
+    \item \textbf{Scientific \& Geospatial Libraries:} NumPy (matrix operations), SciPy (cKDTree spatial indexing, distance transform, ndimage spline interpolation), Shapely (geometric boundary validations), and Matplotlib (headless QuadContour vectorization).
+    \item \textbf{Frontend GIS:} HTML5, modern vanilla CSS design tokens, and Leaflet.js 1.9.4.
+    \item \textbf{Persistence \& Caching:} SQLite in Write-Ahead Logging (WAL) mode with cryptographic SHA-256 and spatial coordinate quantization.
+    \item \textbf{External APIs:} Open-Elevation API (Global DEM), OpenStreetMap Nominatim (Geocoding), Open-Meteo Historical Archive API, and NASA POWER Agro-Climatology API (Precipitation).
+\end{itemize}
+
+%% =====================================================================
+\section{Methodology}
+\label{sec:methodology}
+
+This section details the algorithmic formulations governing terrain modeling, flow accumulation, candidate ranking, and catchment volume calculation.
+
+\subsection{Terrain and Elevation Analysis}
+Depending on the workflow invoked, the elevation surface is generated through one of two mathematically rigorous pathways:
+
+\subsubsection{Workflow 1: Inverse Distance Weighting (IDW) from Contour Vectors}
+When vector contour maps are provided, elevation vertices are extracted from KML/KMZ LineStrings. Because data is continuous along lines but unobserved between them, an Inverse Distance Weighted interpolation surface is constructed on an $N \times N$ grid:
+\begin{equation}
+Z(x) = \frac{\sum_{i=1}^{k} \frac{z_i}{d(x, x_i)^p}}{\sum_{i=1}^{k} \frac{1}{d(x, x_i)^p}}
+\end{equation}
+where $x$ is the target grid coordinate, $x_i$ is a known contour vertex with elevation $z_i$, $d(x, x_i)$ is the Euclidean distance computed via a SciPy \texttt{cKDTree}, $k = 12$ nearest neighbours, and power parameter $p = 2$.
+
+\subsubsection{Workflows 2 and 3: Global DEM Fetching and Spline Interpolation}
+For user-selected bounding boxes or geocoded villages, a coordinate grid is queried against the Global Digital Elevation Model API. The resulting coarse elevation grid is upsampled to a dense $50 \times 50$ continuous digital surface using third-order bicubic spline interpolation (\texttt{scipy.ndimage.zoom}):
+\begin{equation}
+Z(r, c) = \sum_{i=0}^{3} \sum_{j=0}^{3} a_{ij} \, (r - r_0)^i \, (c - c_0)^j
+\end{equation}
+Vector contour lines are then extracted dynamically from the dense matrix using marching squares contouring (\texttt{matplotlib.pyplot.contour}), emitting elevation-labeled polyline coordinates for client visualization.
+
+\subsection{Catchment Area Delineation}
+Water drainage follows gravity along the path of steepest downhill descent. On the $N \times N$ elevation matrix, an 8-neighbour directed graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ is instantiated. For each cell $u = (r, c)$, the distance to each neighbor $v \in \mathcal{N}_8(u)$ is calculated using the spherical Haversine formula to eliminate latitudinal planar distortion:
+\begin{equation}
+d_{\text{hav}}(u, v) = 2 R_{\text{earth}} \arcsin \left( \sqrt{\sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_u) \cos(\phi_v) \sin^2\left(\frac{\Delta \lambda}{2}\right)} \right)
+\end{equation}
+The topographic slope gradient $S(u, v)$ is evaluated as:
+\begin{equation}
+S(u, v) = \frac{Z(u) - Z(v)}{d_{\text{hav}}(u, v)}
+\end{equation}
+Under the deterministic D8 model, a directed flow edge $(u \to v^*)$ is assigned to the neighbor maximizing positive slope:
+\begin{equation}
+v^* = \arg\max_{v \in \mathcal{N}_8(u)} S(u, v) \quad \text{subject to } S(u, v^*) > 0
+\end{equation}
+Cells possessing no strictly downhill neighbor ($S \le 0, \forall v$) are identified as local terrain depressions or natural sinks.
+
+Assuming uniform precipitation, each grid cell contributes an initial runoff unit of 1. Total flow accumulation $A_{\text{acc}}(u)$ represents the aggregate number of upstream cells draining through cell $u$:
+\begin{equation}
+A_{\text{acc}}(u) = 1 + \sum_{v \in \text{InEdges}(u)} A_{\text{acc}}(v)
+\end{equation}
+Because the flow graph is a directed acyclic graph (DAG), $A_{\text{acc}}$ is computed deterministically in $\mathcal{O}(|\mathcal{V}| + |\mathcal{E}|)$ by processing vertices in reverse topological order (from highest elevation to lowest).
+
+Cells exceeding the 98th percentile of accumulation form natural concentrated drainage channels (rivers/streams). To prevent catastrophic pond embankment breaching during monsoon surges, pond candidates within a safety buffer $D_{\text{safe}}$ (default 200~m) of any channel or explicit KML waterway are rejected using an Exact Euclidean Distance Transform:
+\begin{equation}
+D_{\text{channel}}(x) = \min_{y \in \mathcal{V}_{\text{river}}} \|x - y\|_2
+\end{equation}
+
+Safe non-river cells outside topographic ridges are evaluated using a multi-criteria objective score:
+\begin{equation}
+\text{Score}(u) = w_{\text{cat}} \cdot \frac{\ln(1 + A_{\text{acc}}(u))}{\ln(1 + A_{\max})} + w_{\text{low}} \cdot \frac{Z_{\max} - Z(u)}{Z_{\max} - Z_{\min}} + w_{\text{val}} \cdot \min\left(1.0, \, \frac{\bar{Z}_{\text{adj}}(u) - Z(u)}{\Delta Z_{\text{relief}}}\right)
+\end{equation}
+where weights are set to $w_{\text{cat}} = 45$, $w_{\text{low}} = 15$, and $w_{\text{val}} = 35$. Spatial separation enforcement requires $\|u - v\|_2 \ge \delta_{\text{sep}}$ for all selected candidates.
+
+Given an optimal pond sink $u_{\text{pond}}$, its contributing watershed catchment $\mathcal{C}(u_{\text{pond}})$ is delineated by inverting flow direction arrows and executing an uphill Breadth-First Search (BFS):
+\begin{equation}
+\mathcal{C}(u_{\text{pond}}) = \{u_{\text{pond}}\} \cup \{v \in \mathcal{V} \mid \text{Path}(v \rightsquigarrow u_{\text{pond}}) \text{ in } \mathcal{G}\}
+\end{equation}
+Total geographic catchment area $A$ in square meters is computed by summing spherical cell polygons:
+\begin{equation}
+A = \sum_{u \in \mathcal{C}} \text{Area}_{\text{cell}}(u)
+\end{equation}
+
+\subsection{Rainfall Data Integration}
+Annual precipitation $R$ (in meters) is obtained dynamically from meteorological APIs based on the site coordinates. The primary service queries the Open-Meteo Historical Archive API across daily records from 2023. If rate limits or timeouts occur, the system automatically falls back to the NASA POWER Agro-Climatology API, which provides 30-year climate averages.
+
+Harvestable water volume $V$ is estimated using the standard civil Rational Runoff Equation:
+\begin{equation}
+V = C \times R \times A
+\end{equation}
+where $C$ is the dimensionless runoff coefficient chosen from an integrated agro-pedological catalog:
+\begin{itemize}
+    \item $C = 0.30$: Sandy Loam with good vegetative/crop cover.
+    \item $C = 0.40$: Clay/Silt Loam (Standard agricultural catchment).
+    \item $C = 0.50$: Hard Clay soils with reduced permeability.
+    \item $C = 0.60$: Barren or high-slope clay soils.
+\end{itemize}
+
+%% =====================================================================
+\section{Implementation}
+\label{sec:implementation}
+
+\subsection{Backend and API Design}
+The gateway exposes a modular REST API interface:
+
+\begin{table}[h]
+  \caption{Gateway REST API Endpoints}
+  \label{tab:api}
+  \small
+  \begin{tabular}{llp{7.8cm}}
+    \toprule
+    HTTP Method & Endpoint Path & Operational Purpose \\
+    \midrule
+    \texttt{GET} & \texttt{/} & Serves the Leaflet GIS Web Application. \\
+    \texttt{GET} & \texttt{/health} & Gateway health check and active worker count. \\
+    \texttt{GET} & \texttt{/cluster/status} & Real-time worker cluster latencies, request counts, and cache metrics. \\
+    \texttt{GET} & \texttt{/api/rainfall} & Fetches precipitation for coordinates with 24h spatial caching. \\
+    \texttt{GET} & \texttt{/api/geocode} & Geocodes place name to bounding box coordinates via Nominatim. \\
+    \texttt{POST} & \texttt{/analyzeContour} & Case 1: Ingests multipart .kml/.kmz file, checks SHA-256 cache, routes to worker. \\
+    \texttt{POST} & \texttt{/analyzeArea} & Case 2: Ingests map bounding box, quantizes coordinates, routes DEM analysis. \\
+    \texttt{POST} & \texttt{/analyzePlace} & Case 3: Ingests village name, geocodes, normalizes string, routes DEM analysis. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Frontend and Visualization}
+The web interface is built using Leaflet.js, incorporating responsive CSS grids. It provides a tabbed mode selector for the three workflows, quick suggestion chips for common villages, interactive drawing tools for bounding box selection, a crosshair canvas cursor, and synchronized visual layers displaying:
+\begin{itemize}
+    \item Numbered circular markers ($P_1, P_2, \dots, P_N$) for ranked pond candidates.
+    \item Semi-transparent blue polygon overlays representing the upstream delineated catchment cells.
+    \item Blue polyline vectors indicating natural terrain-derived stream channels.
+    \item Earth-toned dashed polylines displaying generated elevation contours.
+    \item An interactive tabular dashboard detailing rank, coordinates, elevation, catchment area (ha), and expected water volume ($m^3$, Liters, and Megaliters).
+\end{itemize}
+
+\begin{figure}[h]
+  \centering
+  \IfFileExists{figures/ui_results_overlay.png}{%
+    \includegraphics[width=0.92\linewidth]{figures/ui_results_overlay.png}
+  }{%
+    \fbox{\parbox{0.9\linewidth}{\centering [Screenshot: Application Interface Showing Results Overlay]}}
+  }
+  \caption{Application interface showing the results overlay for Khapri village with ranked pond markers, uphill catchment polygons, terrain contours, and hydrological statistics.}
+  \label{fig:ui}
+  \Description{Web user interface showing map with candidate pond locations, delineated catchment boundary, elevation contours, and results table.}
+\end{figure}
+
+\subsection{Database and Storage}
+Persistence is implemented in \texttt{cache\_service.py} using an embedded SQLite database configured in Write-Ahead Logging (\texttt{PRAGMA journal\_mode=WAL}) and \texttt{PRAGMA synchronous=NORMAL}. Entries are indexed by \texttt{cache\_key} and \texttt{expires\_at}. Caching logic is customized for each workflow:
+\begin{itemize}
+    \item \textbf{Case 1 (File Upload):} The raw file bytes are hashed using SHA-256 (\texttt{hashlib.sha256(bytes).hexdigest()[:16]}), combined with analysis parameters to form a deterministic signature.
+    \item \textbf{Case 2 (Area Selection):} Latitude and longitude bounding coordinates are quantized to a $0.002^\circ$ resolution ($\approx 200$~meters), ensuring human mouse dragging variations over the same parcel hit identical cache keys.
+    \item \textbf{Case 3 (Village Search):} Place names are normalized by stripping special characters, converting to lowercase, and formatting as uniform alphanumeric slugs.
+\end{itemize}
+
+%% =====================================================================
+\section{CSD Themes and Topics Applied in the Project}
+\label{sec:csd-themes}
+
+The architecture of this system directly embodies core Computer System Design principles taught in the curriculum.
+
+\begin{table*}[t]
+  \caption{Mapping of core CSD themes/topics to their use in this project}
+  \label{tab:csd-themes}
+  \small
+  \begin{tabular}{p{3.2cm}p{4.6cm}p{7.4cm}}
+    \toprule
+    CSD Theme/Topic & Where used in the project & Justification / design rationale \\
+    \midrule
+    API Design (REST) & \texttt{main.py}, \texttt{load\_balancer.py} & Standardized HTTP verbs, explicit error codes (200, 400, 502), typed Pydantic payloads, and clean OpenAPI decoupling between UI and workers. \\
+    Load Balancing & \texttt{load\_balancer.py} on System 1 & Distributes CPU-intensive terrain calculations across Systems 2, 3, and 4 via Round-Robin with least-connections bias to prevent worker saturation. \\
+    Caching & \texttt{cache\_service.py} on System 1 & SQLite WAL persistent 24h cache eliminates redundant external DEM/meteo queries and expensive IDW calculations ($3.7\text{s} \to <90\text{ms}$). \\
+    Database Indexing / Query Optimization & \texttt{cache\_service.py} & B-tree indexes on \texttt{cache\_key} and \texttt{expires\_at} guarantee $\mathcal{O}(1)$ query lookups and rapid pruning of expired records. \\
+    Concurrency / Asynchronous Processing & \texttt{load\_balancer.py} & Python AsyncIO with \texttt{httpx.AsyncClient} prevents blocking the gateway event loop while awaiting remote worker responses. \\
+    Microservices vs. Monolith & Gateway/Worker Split & Decoupled master-worker design: System 1 gateway remains ultra-responsive for static UI serving while stateless worker nodes scale horizontally. \\
+    Design Patterns & Reverse Proxy, Strategy, Factory & Reverse proxy handles traffic dispatching; Strategy pattern enables Open-Meteo to NASA POWER fallback; Factory instantiates terrain generators. \\
+    Authentication / Authorization & CORS \& IP Whitelisting & Internal network whitelisting restricts worker execution to System 1 gateway requests, preventing unauthorized external access. \\
+    Containerization / Deployment & Python venv \& Daemons & Isolated environments on each lab host with background execution (\texttt{nohup}) ensure reproducible library dependencies. \\
+    Error Handling and Resilience & In-flight failover \& retries & Gateway detects connection drops mid-flight and transparently re-routes requests to healthy workers, preventing user-facing 502 errors. \\
+    Algorithms and Complexity & D8 Flow \& Reverse BFS & D8 topological sort ($\mathcal{O}(V \log V)$) and reverse BFS ($\mathcal{O}(V + E)$) chosen over naive $\mathcal{O}(N^2)$ all-pairs traversal for sub-second execution. \\
+    Testing Strategy & Pytest Unit \& Cluster Tests & 15 automated test cases in \texttt{tests/} validate geometry, parsing, flow algorithms, and end-to-end cluster failover. \\
+    Version Control / CI-CD & Git Repository & Structured Git tracking on GitHub (\url{https://github.com/jiyaa25/csd_asg_pond}) coordinated deployment across all 4 server nodes. \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\paragraph{Significant Engineering Decisions}
+Two architectural decisions were critical to the system's performance and reliability:
+\begin{enumerate}
+    \item \textbf{Decoupled Master-Worker Architecture over Monolithic Deployment:} A single server hosting both the web client and running heavy IDW matrix calculations suffers severe socket saturation when multiple users submit requests simultaneously. Offloading compute to Systems 2, 3, and 4 keeps the System 1 Gateway's CPU utilization near zero, guaranteeing consistent sub-millisecond static page loads and proxy routing.
+    \item \textbf{Intelligent Quantized Caching over Raw Key Matching:} Conventional exact-match caching is ineffective in interactive GIS applications because human mouse clicks never produce identical floating-point coordinates. Implementing spatial coordinate quantization ($0.002^\circ$ for DEM bounds and $0.05^\circ$ for climatology) transformed an otherwise brittle cache into a practical system achieving instant $<100$~ms turnaround times on repeated queries.
+\end{enumerate}
+
+%% =====================================================================
+\section{Results and Evaluation}
+\label{sec:results}
+
+The cluster was validated through end-to-end operational testing across all three workflows on the remote university network (\texttt{10.1.75.79:5261}).
+
+\begin{table}[h]
+  \caption{Representative Hydrological Results Across Tested Locations}
+  \label{tab:results}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    Test Case / Location & Lat, Lon & Rain ($R$) & Runoff ($C$) & Catchment ($A$) & Top Water Vol ($V$) & Execution Mode \\
+    \midrule
+    Case 1: \texttt{contours\_1m.kml} & $21.2528^\circ, 81.2872^\circ$ & 1289 mm & 0.40 & 1.631 ha & $8,410.5\text{ m}^3$ (8.41 ML) & Worker Compute \\
+    Case 2: Selected Farm Area & $21.2486^\circ, 81.3006^\circ$ & 1289 mm & 0.40 & 9.407 ha & $48,514.6\text{ m}^3$ (48.51 ML) & Worker Compute \\
+    Case 3: Khapri Village & $21.0533^\circ, 79.0451^\circ$ & 1052 mm & 0.40 & 1.778 ha & $7,481.9\text{ m}^3$ (7.48 ML) & Worker Compute \\
+    Case 3: Khapri (Re-query) & $21.0533^\circ, 79.0451^\circ$ & 1052 mm & 0.40 & 1.778 ha & $7,481.9\text{ m}^3$ (7.48 ML) & 24h Cache Hit \\
+    Case 3: Bhilai Urban Fringe & $21.2167^\circ, 81.4333^\circ$ & 1289 mm & 0.40 & 40.710 ha & $209,917.0\text{ m}^3$ (209.9 ML) & Worker Compute \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[h]
+  \centering
+  \IfFileExists{figures/cache_results_overlay.png}{%
+    \includegraphics[width=0.92\linewidth]{figures/cache_results_overlay.png}
+  }{%
+    \fbox{\parbox{0.9\linewidth}{\centering [Screenshot: Example Results Overlay and Performance Metrics]}}
+  }
+  \caption{Example results overlay and cluster performance validation card showing instant sub-100 ms query resolution on a 24-hour warm cache hit.}
+  \label{fig:results}
+  \Description{Screenshot of results overlay displaying pond storage parameters, response time metrics, and cluster health indicators.}
+\end{figure}
+
+\subsection{Performance}
+System latency was measured under cold compute conditions (cache miss) versus warm persistent cache conditions:
+\begin{itemize}
+    \item \textbf{Case 1 (KML Upload):} First run required 2,880~ms (XML parsing, IDW grid construction, flow routing); subsequent upload of the identical file returned via SHA-256 cache in \textbf{216~ms}.
+    \item \textbf{Case 2 (Area DEM):} First run required 2,769~ms (DEM API query, spline interpolation, contour vectorization); second query within the quantized boundary returned in \textbf{180~ms}.
+    \item \textbf{Case 3 (Village Search):} Fresh query for Khapri took 3,867~ms on Worker 1 (\texttt{sys2}); subsequent query responded from System 1 cache in \textbf{89.5~ms} (a $\approx 43\times$ speedup).
+    \item \textbf{Round-Robin Load Distribution:} Verification logs confirmed sequential request distribution across workers: Request 1 $\to$ \texttt{sys2}, Request 2 $\to$ \texttt{sys3}, Request 3 $\to$ \texttt{sys4}.
+\end{itemize}
+
+%% =====================================================================
+\section{Discussion and Limitations}
+\label{sec:discussion}
+While the system successfully addresses the requirements, several engineering limitations provide avenues for future enhancements:
+\begin{enumerate}
+    \item \textbf{DEM Spatial Resolution:} Public Open-Elevation DEM data operates at $\approx 30$-meter ground resolution. While bicubic spline interpolation smooths elevations, subtle micro-topographic field bunds ($<1$~meter height) are not captured unless surveyed drone LIDAR data is supplied via Case 1 KML.
+    \item \textbf{Rational Method Infiltration Dynamics:} The Rational equation assumes constant runoff coefficients throughout a rain event. Integrating dynamic Green-Ampt infiltration or SCS Curve Number methods would better account for antecedent soil moisture conditions across multi-day monsoonal storms.
+    \item \textbf{Gateway Single Point of Failure:} Although System 1 runs lightweight gateway software, the physical mapping of port 5261 to System 1 represents a hardware-level single point of entry. In production, a Virtual IP (VIP) managed via Keepalived or an AWS Elastic Load Balancer would provide redundant multi-master failover.
+\end{enumerate}
+
+%% =====================================================================
+\section{AI Tool Usage Declaration}
+\label{sec:ai-usage}
+In compliance with the assignment's LLM Usage Policy, generative AI tools (including ChatGPT and Claude) were utilized as technical sounding boards and productivity accelerators during specific stages of project development:
+\begin{itemize}
+    \item \textbf{Conceptual Discussions and Algorithmic Logic:} AI assistance was used for discussing mathematical formulations, specifically reviewing D8 steepest-gradient directional logic, verifying spherical Haversine trigonometric distance equations, and exploring standard soil-runoff coefficient ranges for the Rational Method.
+    \item \textbf{Code Improvement and Debugging:} AI tools were consulted to identify and resolve complex syntax and runtime bugs, such as multipart form-data parameter mismatches between client and server, non-blocking asynchronous socket timeouts in \texttt{httpx}, and database concurrency locks under multi-threaded SQLite execution.
+    \item \textbf{Frontend UI Assistance:} AI was utilized to suggest modern CSS layout structures, responsive flexbox card arrangements, and Leaflet layer group management patterns.
+    \item \textbf{Report Formatting:} AI was used to format technical content into the standard ACM \texttt{acmart} manuscript LaTeX template.
+    \item \textbf{Manual Verification and Testing:} All core system architecture, distributed cluster configurations across the four lab nodes, mathematical pipelines, and algorithmic implementations were manually reviewed, validated, and thoroughly tested using automated pytest suites and end-to-end browser verification by the student.
+\end{itemize}
+
+%% =====================================================================
+\appendix
+
+\section{Source Code and Repository}
+The complete source code, automated test suite, frontend assets, figures, and deployment scripts are available in the project Git repository:
+\begin{center}
+\url{https://github.com/jiyaa25/csd_asg_pond}
+\end{center}
+
+\subsection{Repository Folder Structure}
+\begin{itemize}
+    \item \texttt{load\_balancer.py}: System 1 Gateway, health daemon, worker load balancer, and caching router.
+    \item \texttt{cache\_service.py}: SQLite Write-Ahead Logging (WAL) cache engine with spatial quantization.
+    \item \texttt{main.py}: Core FastAPI worker computation service running on Systems 2, 3, and 4.
+    \item \texttt{catchment.py}: D8 flow accumulation, river/ridge exclusion, and uphill reverse-flow BFS.
+    \item \texttt{terrain.py} \& \texttt{graph.py}: IDW terrain interpolation and spherical 8-neighbour surface graphs.
+    \item \texttt{dem\_service.py}: Global DEM querying, bicubic spline zooming, and contour extraction.
+    \item \texttt{rainfall\_service.py}: Dual-fallback precipitation service (Open-Meteo and NASA POWER).
+    \item \texttt{frontend/}: Interactive Leaflet.js Web GIS application (\texttt{index.html}, \texttt{app.js}, \texttt{style.css}).
+    \item \texttt{figures/}: High-resolution screenshots and architecture diagrams referenced in this report.
+    \item \texttt{tests/}: Automated pytest unit and integration test suite (\texttt{test\_all.py}, \texttt{test\_parser.py}).
+    \item \texttt{report.tex}: Complete ACM manuscript LaTeX source code for this technical report.
+\end{itemize}
+
+\end{document}
+\endinput

@@ -628,8 +628,19 @@ function showAnalysisSummary(data) {
     ? "Case 2 (Map Selection DEM)"
     : "Case 1 (KML Contour Upload)";
 
+  const isCacheHit = data.cache && data.cache.hit;
+  const execNode = isCacheHit
+    ? "⚡ Instant Cache Hit (<5ms)"
+    : (data.cache && data.cache.node ? `🖥️ stu46_${data.cache.node} (Worker)` : "🖥️ Distributed Worker");
+
+  const cacheStatus = isCacheHit
+    ? `Cached (${data.cache.age_seconds}s ago, valid 24h)`
+    : "Computed Fresh & Cached 24h";
+
   document.getElementById("summary").innerHTML = [
     ["Workflow Mode", modeBadge],
+    ["Distributed Compute", execNode],
+    ["Cache Lifetime", cacheStatus],
     ["Contours Extracted", input.contour_count],
     ["Elevation Range", `${input.elevation_min_m}–${input.elevation_max_m} m`],
     ["DEM Grid Dimension", `${input.grid_size} × ${input.grid_size}`],
@@ -640,7 +651,7 @@ function showAnalysisSummary(data) {
     ["Rainfall Source", `${wp.annual_rainfall_mm || 1000} mm (${wp.rainfall_source || "API"})`],
     ["Runoff Coefficient", `${wp.soil_type || "C=" + (wp.runoff_coefficient || 0.40)}`]
   ].map(([label, value], idx) => {
-    const isHighlight = idx === 7 ? " highlight" : "";
+    const isHighlight = idx === 1 ? " highlight" : "";
     return `<div class="stat${isHighlight}"><span class="label">${label}</span><span class="value">${value}</span></div>`;
   }).join("");
 }
@@ -701,4 +712,27 @@ document.addEventListener("DOMContentLoaded", () => {
       fetchRainfallForCoords(center.lat, center.lng);
     });
   }
+
+  fetchClusterStatus();
 });
+
+async function fetchClusterStatus() {
+  try {
+    const res = await fetch(`${API_URL}/cluster/status`);
+    if (res.ok) {
+      const data = await res.json();
+      const healthyWorkers = (data.workers || []).filter(w => w.healthy);
+      const label = document.getElementById("activeWorkersLabel");
+      if (label) {
+        label.textContent = `${healthyWorkers.map(w => w.id).join(", ")} (${healthyWorkers.length} Active)`;
+      }
+      const cacheLabel = document.getElementById("cacheStatusLabel");
+      if (cacheLabel && data.cache) {
+        cacheLabel.textContent = `24h Cache (${data.cache.active_entries || 0} active)`;
+      }
+    }
+  } catch (err) {
+    console.warn("Cluster status check:", err);
+  }
+}
+

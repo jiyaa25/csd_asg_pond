@@ -10,10 +10,23 @@
 <body>
   <main class="page">
     <header class="hero">
-      <div>
+      <div class="hero-text">
         <p class="eyebrow">Smart Catchment &amp; Terrain Analysis System</p>
         <h1>Pond &amp; Catchment Analyzer</h1>
         <p class="subtitle">Derive optimal pond locations, flow catchments, and expected water volumes across 3 flexible input workflows: KML contour upload, direct map area selection, or village name search.</p>
+      </div>
+      <div id="clusterStatusBar" class="cluster-status-bar">
+        <div class="cluster-node-chip master-chip" title="Master Gateway & Reverse Proxy">
+          <span class="status-dot online"></span>
+          <span>Gateway: <strong>stu46_sys1</strong></span>
+        </div>
+        <div class="cluster-node-chip worker-chip" title="Distributed Worker Pool">
+          <span class="status-dot online"></span>
+          <span>Workers: <strong id="activeWorkersLabel">sys2, sys3, sys4 (3 Active)</strong></span>
+        </div>
+        <div class="cluster-node-chip cache-chip" title="SQLite WAL Persistent 24h Cache">
+          <span>⚡ <strong id="cacheStatusLabel">24h Smart Cache</strong></span>
+        </div>
       </div>
     </header>
 

@@ -7,10 +7,59 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 .page { max-width: 1540px; margin: 0 auto; padding: 24px; }
-.hero { margin-bottom: 16px; }
+.hero {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
 .hero h1 { margin: 2px 0 6px; font-size: clamp(28px, 3.5vw, 40px); letter-spacing: -0.02em; }
 .subtitle { margin: 0; color: #5f6b76; max-width: 860px; font-size: 14px; }
 .eyebrow { margin: 0 0 4px; text-transform: uppercase; letter-spacing: .1em; font-size: 11px; font-weight: 700; color: #3b745b; }
+
+/* Cluster Status Bar */
+.cluster-status-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.cluster-node-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff;
+  border: 1px solid #d0dcd4;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: #24382e;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9aa8a0;
+  display: inline-block;
+}
+.status-dot.online {
+  background: #2e7d32;
+  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.25);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+.cache-chip {
+  background: #fff8e1;
+  border-color: #ffe082;
+  color: #795548;
+}
+
 .card { background: #fff; border: 1px solid #dfe6e1; border-radius: 14px; box-shadow: 0 6px 20px rgba(25, 45, 35, .05); }
 
 /* Mode Tabs */
